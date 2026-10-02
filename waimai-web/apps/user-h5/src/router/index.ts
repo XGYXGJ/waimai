@@ -16,6 +16,7 @@ const routes = [
   { path: '/profile', component: () => import('@/pages/Profile.vue') },
   { path: '/address', component: () => import('@/pages/Address.vue') },
   { path: '/coupons', component: () => import('@/pages/Coupons.vue') },
+  { path: '/coupon-hall', component: () => import('@/pages/CouponHall.vue') },
 ];
 
 const router = createRouter({

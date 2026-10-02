@@ -15,6 +15,12 @@ public class CouponController {
 
     private final CouponService couponService;
 
+    /** 领券大厅：全平台在售优惠券 */
+    @GetMapping("/hall")
+    public R<Map<String, Object>> hall() {
+        return R.ok(couponService.hall(UserContext.userId()));
+    }
+
     /** 领取优惠券 */
     @PostMapping("/{id}/receive")
     public R<Void> receive(@PathVariable Long id) {

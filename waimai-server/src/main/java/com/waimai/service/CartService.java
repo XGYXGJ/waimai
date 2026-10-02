@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -35,7 +36,19 @@ public class CartService {
         var entries = redis.opsForHash().entries(key(userId));
         List<Map<String, Object>> items = new ArrayList<>();
         entries.forEach((k, v) -> items.add(JsonUtil.fromJson((String) v, LinkedHashMap.class)));
-        return Map.of("records", items);
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("records", items);
+        // 附带商家配送费/打包费（供确认订单页展示）
+        if (!items.isEmpty()) {
+            Long merchantId = ((Number) items.get(0).get("merchantId")).longValue();
+            Merchant m = merchantMapper.selectById(merchantId);
+            if (m != null) {
+                resp.put("merchantId", m.getId());
+                resp.put("deliveryFee", m.getDeliveryFee());
+                resp.put("packageFee", m.getPackageFee() == null ? BigDecimal.ZERO : m.getPackageFee());
+            }
+        }
+        return resp;
     }
 
     public List<Map<String, Object>> listItems(Long userId) {

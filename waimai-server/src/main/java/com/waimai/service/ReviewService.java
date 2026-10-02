@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -50,11 +51,22 @@ public class ReviewService {
         aiService.analyzeSentimentAsync(r.getId());
     }
 
-    /** 商家详情页评价列表 */
-    public List<Review> merchantReviews(Long merchantId, int limit) {
-        return reviewMapper.selectList(new QueryWrapper<Review>()
+    /** 商家详情页评价：返回汇总评分 + 评价列表 */
+    public Map<String, Object> merchantReviews(Long merchantId, int limit) {
+        List<Review> list = reviewMapper.selectList(new QueryWrapper<Review>()
                 .eq("merchant_id", merchantId)
                 .orderByDesc("created_at").last("limit " + limit));
+        // 汇总：平均分、总数、好评率
+        List<Review> all = reviewMapper.selectList(new QueryWrapper<Review>().eq("merchant_id", merchantId));
+        double avg = all.isEmpty() ? 0
+                : all.stream().mapToInt(Review::getRating).average().orElse(0);
+        long posCount = all.stream().filter(r -> r.getRating() != null && r.getRating() >= 4).count();
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("avgRating", Math.round(avg * 10) / 10.0);
+        resp.put("total", all.size());
+        resp.put("goodRate", all.isEmpty() ? 0 : Math.round((posCount * 100.0 / all.size()) * 10) / 10.0);
+        resp.put("records", list);
+        return resp;
     }
 
     /** 我的评价 */

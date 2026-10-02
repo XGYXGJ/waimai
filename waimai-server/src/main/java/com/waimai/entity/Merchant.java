@@ -40,6 +40,8 @@ public class Merchant {
 
     private BigDecimal deliveryFee;
 
+    private BigDecimal packageFee;
+
     private BigDecimal rating;
 
     private Integer monthlySales;

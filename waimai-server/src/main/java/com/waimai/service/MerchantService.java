@@ -203,6 +203,7 @@ public class MerchantService {
         if (req.getBusinessHours() != null) m.setBusinessHours(req.getBusinessHours());
         if (req.getMinOrderAmount() != null) m.setMinOrderAmount(BigDecimal.valueOf(req.getMinOrderAmount()));
         if (req.getDeliveryFee() != null) m.setDeliveryFee(BigDecimal.valueOf(req.getDeliveryFee()));
+        if (req.getPackageFee() != null) m.setPackageFee(BigDecimal.valueOf(req.getPackageFee()));
         if (req.getOpenStatus() != null) m.setOpenStatus(req.getOpenStatus());
         merchantMapper.updateById(m);
     }
@@ -271,6 +272,7 @@ public class MerchantService {
         vo.put("businessHours", m.getBusinessHours());
         vo.put("minOrderAmount", m.getMinOrderAmount());
         vo.put("deliveryFee", m.getDeliveryFee());
+        vo.put("packageFee", m.getPackageFee());
         vo.put("rating", m.getRating());
         vo.put("monthlySales", m.getMonthlySales());
         vo.put("openStatus", m.getOpenStatus());

@@ -16,7 +16,7 @@ export const apiSearchDishes = (keyword: string) => get('/merchant/search-dishes
 export const apiDailyRecommend = (lng?: number, lat?: number) => get('/recommend/daily', { lng, lat });
 
 // 购物车
-export const apiCartList = () => get<{ items: CartItem[] }>('/cart');
+export const apiCartList = () => get<{ records: CartItem[]; merchantId?: number; deliveryFee?: number; packageFee?: number }>('/cart');
 export const apiCartAdd = (dishId: number, quantity = 1) => post('/cart/add', null, { params: { dishId, quantity } });
 export const apiCartUpdate = (dishId: number, quantity: number) => post('/cart/update', null, { params: { dishId, quantity } });
 export const apiCartClear = () => del('/cart/clear');
@@ -40,6 +40,7 @@ export const apiFavorites = () => get('/user/favorites');
 export const apiToggleFavorite = (merchantId: number) => post(`/user/favorite/${merchantId}`);
 
 // 优惠券
+export const apiCouponHall = () => get('/coupon/hall');
 export const apiReceiveCoupon = (id: number) => post(`/coupon/${id}/receive`);
 export const apiMyCoupons = (status?: number) => get('/coupon/my', { status });
 export const apiUsableCoupons = (merchantId: number, dishAmount: number) => get('/coupon/usable', { merchantId, dishAmount });

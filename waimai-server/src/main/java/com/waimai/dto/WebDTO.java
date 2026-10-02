@@ -122,6 +122,7 @@ public class WebDTO {
         private String businessHours;
         private Double minOrderAmount;
         private Double deliveryFee;
+        private Double packageFee;
         private Integer openStatus;
     }
 }

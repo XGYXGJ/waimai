@@ -61,17 +61,18 @@ public class OrderService {
         Merchant m = requireMerchant(merchantId);
         BigDecimal dishAmount = sumDishAmount(items);
         BigDecimal deliveryFee = m.getDeliveryFee();
+        BigDecimal packageFee = m.getPackageFee() == null ? BigDecimal.ZERO : m.getPackageFee();
         BigDecimal discount = BigDecimal.ZERO;
         // 默认选最优券（满足门槛的 maximum discount）
         List<Map<String, Object>> coupons = couponService.usable(userId, merchantId, dishAmount);
         if (!coupons.isEmpty()) discount = (BigDecimal) coupons.get(0).get("discountedAmount");
-        BigDecimal pay = dishAmount.add(deliveryFee).subtract(discount).max(BigDecimal.valueOf(0.01));
+        BigDecimal pay = dishAmount.add(deliveryFee).add(packageFee).subtract(discount).max(BigDecimal.valueOf(0.01));
 
         Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("items", items);
         resp.put("dishAmount", dishAmount);
         resp.put("deliveryFee", deliveryFee);
-        resp.put("packageFee", BigDecimal.ZERO);
+        resp.put("packageFee", packageFee);
         resp.put("discountAmount", discount);
         resp.put("payAmount", pay);
         resp.put("minOrderAmount", m.getMinOrderAmount());
@@ -119,7 +120,8 @@ public class OrderService {
         }
 
         BigDecimal deliveryFee = m.getDeliveryFee();
-        BigDecimal pay = dishAmount.add(deliveryFee).subtract(discount).max(BigDecimal.valueOf(0.01));
+        BigDecimal packageFee = m.getPackageFee() == null ? BigDecimal.ZERO : m.getPackageFee();
+        BigDecimal pay = dishAmount.add(deliveryFee).add(packageFee).subtract(discount).max(BigDecimal.valueOf(0.01));
 
         // ---- 落库 ----
         Orders order = new Orders();
@@ -132,7 +134,7 @@ public class OrderService {
                 "lng", addr.getLng(), "lat", addr.getLat())));
         order.setDishAmount(dishAmount);
         order.setDeliveryFee(deliveryFee);
-        order.setPackageFee(BigDecimal.ZERO);
+        order.setPackageFee(packageFee);
         order.setDiscountAmount(discount);
         order.setPayAmount(pay);
         order.setUserCouponId(req.getUserCouponId());
@@ -548,6 +550,7 @@ public class OrderService {
         vo.put("riderId", o.getRiderId());
         vo.put("dishAmount", o.getDishAmount());
         vo.put("deliveryFee", o.getDeliveryFee());
+        vo.put("packageFee", o.getPackageFee());
         vo.put("discountAmount", o.getDiscountAmount());
         vo.put("payAmount", o.getPayAmount());
         vo.put("status", o.getStatus());

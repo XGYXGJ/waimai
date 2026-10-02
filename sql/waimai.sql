@@ -76,6 +76,7 @@ CREATE TABLE `merchant` (
   `business_hours`   VARCHAR(50) DEFAULT '09:00-21:00',
   `min_order_amount` DECIMAL(10,2) NOT NULL DEFAULT 20.00,
   `delivery_fee`     DECIMAL(10,2) NOT NULL DEFAULT 3.00,
+  `package_fee`      DECIMAL(10,2) NOT NULL DEFAULT 1.00,
   `rating`           DECIMAL(3,1) NOT NULL DEFAULT 4.8,
   `monthly_sales`    INT NOT NULL DEFAULT 0,
   `open_status`      TINYINT NOT NULL DEFAULT 1,

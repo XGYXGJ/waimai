@@ -23,10 +23,30 @@
           <div class="dish-name">{{ d.name }}</div>
           <div class="dish-desc">{{ d.description }}</div>
           <div class="dish-foot">
-            <span class="price">{{ d.price }}</span>
+            <div class="dish-price-wrap">
+              <span class="price">¥{{ d.price }}</span>
+              <span v-if="d.originalPrice > d.price" class="origin-price">¥{{ d.originalPrice }}</span>
+              <van-tag v-if="d.originalPrice > d.price" type="danger" plain size="mini">{{ discountLabel(d) }}</van-tag>
+            </div>
             <van-stepper :model-value="cartQty(d.id)" min="0" @change="(v: number) => changeQty(d, v)" />
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- 用户评价 -->
+    <div class="review-section" v-if="reviews.records?.length">
+      <div class="review-header">
+        <span class="review-title">用户评价</span>
+        <span class="review-score">⭐ {{ reviews.avgRating || 0 }} <span class="review-sub">({{ reviews.total || 0 }}条 · 好评率{{ reviews.goodRate || 0 }}%)</span></span>
+      </div>
+      <div class="review-item" v-for="r in reviews.records" :key="r.id">
+        <div class="review-top">
+          <van-rate :model-value="r.rating" readonly :size="12" color="#ff6034" />
+          <span class="review-time">{{ (r.createdAt || '').slice(0, 10) }}</span>
+        </div>
+        <div class="review-content">{{ r.content }}</div>
+        <div class="review-reply" v-if="r.reply">商家回复：{{ r.reply }}</div>
       </div>
     </div>
 
@@ -45,7 +65,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { showToast } from 'vant';
-import { apiMerchantDetail, apiCartAdd, apiCartUpdate } from '@/api';
+import { apiMerchantDetail, apiCartAdd, apiCartUpdate, apiMerchantReviews } from '@/api';
 import type { Dish } from '@waimai/shared';
 
 const route = useRoute();
@@ -56,6 +76,13 @@ const merchant = ref<any>({});
 const dishCategories = ref<any[]>([]);
 const dishes = ref<Dish[]>([]);
 const cartMap = ref<Record<number, number>>({});
+const reviews = ref<any>({ records: [], avgRating: 0, total: 0, goodRate: 0 });
+
+function discountLabel(d: any) {
+  if (!d.originalPrice || d.originalPrice <= 0) return '';
+  const pct = Math.round((d.price / d.originalPrice) * 100) / 10;
+  return pct + '折';
+}
 
 function dishesByCategory(catId: number) {
   return dishes.value.filter((d) => d.categoryId === catId);
@@ -92,6 +119,10 @@ async function load() {
   } catch (e: any) {
     showToast(e.message);
   }
+  try {
+    const r: any = await apiMerchantReviews(merchantId);
+    reviews.value = r || { records: [], avgRating: 0, total: 0, goodRate: 0 };
+  } catch {}
 }
 
 onMounted(load);
@@ -179,6 +210,69 @@ onMounted(load);
   justify-content: space-between;
   align-items: center;
   margin-top: 8px;
+}
+.dish-price-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.origin-price {
+  font-size: 12px;
+  color: #999;
+  text-decoration: line-through;
+}
+.review-section {
+  background: #fff;
+  margin-top: 12px;
+  padding: 12px 16px;
+}
+.review-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.review-title {
+  font-weight: 600;
+  font-size: 15px;
+}
+.review-score {
+  color: #ff6034;
+  font-weight: 600;
+}
+.review-sub {
+  font-size: 12px;
+  color: #999;
+  font-weight: normal;
+}
+.review-item {
+  padding: 10px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+.review-item:last-child {
+  border-bottom: none;
+}
+.review-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.review-time {
+  font-size: 12px;
+  color: #999;
+}
+.review-content {
+  font-size: 14px;
+  color: #333;
+  margin-top: 6px;
+}
+.review-reply {
+  font-size: 12px;
+  color: #ff6034;
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: #fff7f3;
+  border-radius: 6px;
 }
 .cart-bar {
   position: fixed;

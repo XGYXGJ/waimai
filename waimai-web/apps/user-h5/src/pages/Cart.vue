@@ -76,7 +76,7 @@ const remark = ref('');
 const showAddress = ref(false);
 const showCoupons = ref(false);
 const deliveryFee = ref(0);
-const packageFee = ref(1);
+const packageFee = ref(0);
 const merchantId = ref<number | null>(null);
 
 const discount = computed(() => {
@@ -119,10 +119,10 @@ async function submit() {
 async function load() {
   try {
     const data: any = await apiCartList();
-    items.value = data.items || [];
+    items.value = data.records || [];
     if (data.merchantId) merchantId.value = data.merchantId;
-    if (data.deliveryFee !== undefined) deliveryFee.value = data.deliveryFee;
-    if (data.packageFee !== undefined) packageFee.value = data.packageFee;
+    if (data.deliveryFee !== undefined && data.deliveryFee !== null) deliveryFee.value = data.deliveryFee;
+    if (data.packageFee !== undefined && data.packageFee !== null) packageFee.value = data.packageFee;
     if (data.merchantId) {
       const coupons: any = await apiUsableCoupons(data.merchantId, dishAmount.value);
       usableCoupons.value = coupons || [];

@@ -15,7 +15,12 @@
 
       <el-table :data="dishes">
         <el-table-column prop="name" label="菜品名" />
-        <el-table-column prop="price" label="价格" width="100" />
+        <el-table-column label="价格" width="140">
+          <template #default="{ row }">
+            <span>{{ row.price }}</span>
+            <span v-if="row.originalPrice > row.price" style="color: #999; text-decoration: line-through; margin-left: 6px; font-size: 12px">{{ row.originalPrice }}</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="stock" label="库存" width="80" />
         <el-table-column prop="monthlySales" label="月售" width="80" />
         <el-table-column label="状态" width="100">
@@ -43,7 +48,11 @@
         </el-form-item>
         <el-form-item label="名称"><el-input v-model="form.name" /></el-form-item>
         <el-form-item label="描述"><el-input v-model="form.description" type="textarea" /></el-form-item>
-        <el-form-item label="价格"><el-input-number v-model="form.price" :min="0" :precision="2" /></el-form-item>
+        <el-form-item label="现价"><el-input-number v-model="form.price" :min="0" :precision="2" /></el-form-item>
+        <el-form-item label="原价">
+          <el-input-number v-model="form.originalPrice" :min="0" :precision="2" placeholder="高于现价则显示折扣" />
+          <div class="form-tip">原价高于现价时，用户端会显示划线价与折扣</div>
+        </el-form-item>
         <el-form-item label="库存"><el-input-number v-model="form.stock" :min="0" /></el-form-item>
         <el-form-item label="标签"><el-input v-model="form.tags" placeholder="用逗号分隔，如：辣,量大" /></el-form-item>
       </el-form>
@@ -82,7 +91,7 @@ const categoryForm = ref<any>({ name: '', sort: 0 });
 
 function openDish(d?: any) {
   editing.value = d || null;
-  form.value = d ? { ...d } : { name: '', description: '', price: 0, stock: 999, tags: '', categoryId: categoryId.value };
+  form.value = d ? { ...d } : { name: '', description: '', price: 0, originalPrice: null, stock: 999, tags: '', categoryId: categoryId.value };
   showDish.value = true;
 }
 
@@ -99,6 +108,7 @@ async function saveDish() {
       name: form.value.name,
       description: form.value.description,
       price: form.value.price,
+      originalPrice: form.value.originalPrice,
       stock: form.value.stock,
       tags: form.value.tags,
     });
@@ -148,3 +158,11 @@ onMounted(() => {
   load();
 });
 </script>
+
+<style scoped>
+.form-tip {
+  font-size: 12px;
+  color: #999;
+  margin-top: 4px;
+}
+</style>

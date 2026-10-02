@@ -10,6 +10,7 @@
     </div>
 
     <van-cell-group inset>
+      <van-cell title="领券大厅" is-link to="/coupon-hall" />
       <van-cell title="我的订单" is-link to="/orders" />
       <van-cell title="我的优惠券" is-link to="/coupons" />
       <van-cell title="收货地址" is-link to="/address" />

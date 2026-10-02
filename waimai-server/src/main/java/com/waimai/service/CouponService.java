@@ -28,8 +28,40 @@ public class CouponService {
     private final CouponMapper couponMapper;
     private final UserCouponMapper userCouponMapper;
     private final StringRedisTemplate redis;
+    private final com.waimai.mapper.MerchantMapper merchantMapper;
 
     /* ---------- 用户侧 ---------- */
+
+    /** 领券大厅：全平台在售（商家券 + 平台券），附带商家名与领取状态 */
+    public Map<String, Object> hall(Long userId) {
+        List<Coupon> list = couponMapper.selectList(new QueryWrapper<Coupon>()
+                .eq("status", 1)
+                .le("start_time", LocalDateTime.now())
+                .ge("end_time", LocalDateTime.now())
+                .orderByDesc("created_at"));
+        List<Map<String, Object>> records = new ArrayList<>();
+        for (Coupon c : list) {
+            Map<String, Object> m = toVo(c);
+            // 商家名
+            if (c.getMerchantId() != null && c.getMerchantId() != 0) {
+                var merchant = merchantMapper.selectById(c.getMerchantId());
+                m.put("merchantName", merchant == null ? "全平台" : merchant.getShopName());
+            } else {
+                m.put("merchantName", "全平台");
+            }
+            // 是否已抢完
+            boolean soldOut = c.getTotalCount() != null && c.getTotalCount() > 0
+                    && c.getReceivedCount() != null && c.getReceivedCount() >= c.getTotalCount();
+            m.put("soldOut", soldOut);
+            // 本人已领数量 / 是否达限
+            long mine = userCouponMapper.selectCount(new QueryWrapper<UserCoupon>()
+                    .eq("user_id", userId).eq("coupon_id", c.getId()));
+            m.put("receivedMine", mine);
+            m.put("reachLimit", c.getPerUserLimit() != null && mine >= c.getPerUserLimit());
+            records.add(m);
+        }
+        return Map.of("records", records);
+    }
 
     /** 某商家可领的优惠券 */
     public List<Map<String, Object>> available(Long merchantId) {
@@ -41,7 +73,9 @@ public class CouponService {
         List<Map<String, Object>> result = new ArrayList<>();
         for (Coupon c : list) {
             Map<String, Object> m = toVo(c);
-            m.put("received", couponMapper.selectById(c.getId()).getReceivedCount() >= c.getTotalCount() && c.getTotalCount() > 0);
+            boolean soldOut = c.getTotalCount() != null && c.getTotalCount() > 0
+                    && c.getReceivedCount() != null && c.getReceivedCount() >= c.getTotalCount();
+            m.put("soldOut", soldOut);
             result.add(m);
         }
         return result;

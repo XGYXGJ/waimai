@@ -52,7 +52,7 @@ async function load() {
   try {
     const shop: any = await apiShopInfo();
     const data: any = await apiMerchantReviews(shop.id);
-    reviews.value = data || [];
+    reviews.value = data.records || [];
   } catch {}
 }
 

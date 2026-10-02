@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/review")
@@ -26,10 +27,10 @@ public class ReviewController {
         return R.ok();
     }
 
-    /** 商家详情页评价列表（匿名可看） */
+    /** 商家详情页评价列表（匿名可看，含评分汇总） */
     @PublicApi
     @GetMapping("/merchant/{merchantId}")
-    public R<List<Review>> merchantReviews(@PathVariable Long merchantId) {
+    public R<Map<String, Object>> merchantReviews(@PathVariable Long merchantId) {
         return R.ok(reviewService.merchantReviews(merchantId, 20));
     }
 

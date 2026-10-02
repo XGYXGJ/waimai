@@ -42,6 +42,7 @@
       <el-form-item label="营业时间"><el-input v-model="form.businessHours" placeholder="如 09:00-22:00" /></el-form-item>
       <el-form-item label="起送价"><el-input-number v-model="form.minOrderAmount" :min="0" :precision="2" /></el-form-item>
       <el-form-item label="配送费"><el-input-number v-model="form.deliveryFee" :min="0" :precision="2" /></el-form-item>
+      <el-form-item label="打包费"><el-input-number v-model="form.packageFee" :min="0" :precision="2" /></el-form-item>
       <el-form-item label="营业状态">
         <el-switch v-model="form.openStatus" :active-value="1" :inactive-value="0" />
       </el-form-item>
@@ -155,6 +156,7 @@ async function save() {
       businessHours: form.value.businessHours,
       minOrderAmount: form.value.minOrderAmount,
       deliveryFee: form.value.deliveryFee,
+      packageFee: form.value.packageFee,
       openStatus: form.value.openStatus,
     });
     ElMessage.success('保存成功');
