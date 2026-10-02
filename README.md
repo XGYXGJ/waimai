@@ -1,0 +1,108 @@
+# 多端智能外卖点餐平台
+
+基于 Spring Boot 3 + Vue 3 的四端外卖平台（用户端 H5 / 商户端 Web / 管理端 Web / 骑手端 H5），
+集成推荐算法、竞价排名与 AI 大模型应用。完整设计见 `../waimai-proposal/外卖平台-完整设计文档.md`。
+
+## 目录结构
+
+```
+waimai/
+├─ sql/waimai.sql            # 建库建表 + 初始数据
+├─ waimai-server/            # Spring Boot 后端 (8080)
+├─ waimai-ai/                # Python FastAPI AI 服务 (8000)
+├─ waimai-web/               # 前端 monorepo (npm workspaces)
+│  ├─ packages/shared/       # 四端共享：request/ws/工具
+│  └─ apps/
+│     ├─ user-h5/            # 用户端   http://localhost:5173
+│     ├─ rider-h5/           # 骑手端   http://localhost:5174
+│     ├─ merchant-web/       # 商户端   http://localhost:5175
+│     └─ admin-web/          # 管理端   http://localhost:5176
+├─ docker-compose.yml        # 一键部署 (mysql/redis/rabbitmq/server/ai/nginx)
+└─ nginx.conf
+```
+
+## 快速启动（开发模式）
+
+### 1. 中间件
+```bash
+docker compose up -d mysql redis rabbitmq
+# 等待 mysql 就绪后导入建表
+docker exec -i waimai-mysql mysql -uroot -pwaimai123 waimai < sql/waimai.sql
+```
+
+### 2. 后端（一键启动后端 + 四端前端）
+用 IDE 运行 `WaimaiApplication`（需 JDK 17+，会自动建表所需初始数据），或：
+```bash
+cd waimai-server && mvn spring-boot:run   # 本机需 Maven
+```
+
+**后端启动完成后会自动拉起四端前端 Vite dev server，关闭后端（含 IDEA 的 Stop 按钮）时自动停止四端**，
+无需手动执行下面的第 4 步。控制开关见 `application.yml` 的 `waimai.frontend.auto-start`（生产环境默认关闭）。
+
+首次启动自动创建演示数据（详见下方账号表）。
+
+### 3. AI 服务
+```bash
+cd waimai-ai
+pip install -r requirements.txt
+uvicorn app.main:app --port 8000
+```
+
+### 4. 前端（可选，通常无需手动启动）
+默认由后端自动拉起；如需手动启动或独立调试前端：
+```bash
+cd waimai-web
+npm install
+npm run dev:user      # 用户端 5173
+npm run dev:rider     # 骑手端 5174
+npm run dev:merchant  # 商户端 5175
+npm run dev:admin     # 管理端 5176
+```
+
+## 演示账号（首次启动自动生成）
+
+| 角色 | 账号 | 密码 | 端 |
+|---|---|---|---|
+| 管理员 | admin | admin123 | 管理端 |
+| 用户 | 13800000001 | 123456 | 用户端 |
+| 商户 | 13800000002 | 123456 | 商户端 |
+| 骑手 | 13800000003 | 123456 | 骑手端 |
+
+## 数据库密码配置
+
+后端数据库密码**不写死在配置里**，通过环境变量 `MYSQL_PASSWORD` 传入：
+
+```bash
+# IDEA 运行配置：VM options 或 Environment 里加
+MYSQL_PASSWORD=你的MySQL密码
+# 或命令行
+MYSQL_PASSWORD=你的密码 mvn spring-boot:run
+```
+
+开发环境（`application-dev.yml`）连接本机 `localhost:3306/waimai`，用户 `root`；
+生产环境（`application-prod.yml`）连接 docker 的 mysql 容器，密码由 `docker-compose.yml` 的 `MYSQL_PASSWORD` 注入。
+
+## LLM API Key 与地图 Key 配置（重要）
+
+**所有 Key 均在管理端「系统设置 → AI 与地图配置」页面填写**，存入数据库 `sys_config` 表，
+无需改代码或重启：
+- LLM：Provider（deepseek/dashscope）、API Key、Base URL、模型名；可选 Ollama 地址（降级用）
+- 高德地图：JS API Key（前端地图）+ Web 服务 Key（后端路径规划）
+
+申请地址：https://open.amap.com （个人开发者免费额度足够毕设演示）。
+未配置 LLM Key 时 AI 功能自动走 Ollama；两者都不可用时走内置降级话术，主业务不受影响。
+
+## 生产部署（一键）
+```bash
+docker compose up -d --build
+# 访问 http://localhost  (用户端)  /rider /merchant /admin
+```
+
+## 骑手端弹性分级
+
+骑手端通过 `apps/rider-h5/.env` 的 `VITE_APP_MAP_LEVEL` 控制级别：
+- `0` = L1 纯接单状态流转（无地图）
+- `1` = L2 加地图与路线
+- `2` = L3 加实时定位/模拟骑行（默认）
+
+演示环境定位不可靠时，骑手端接单后自动启用「模拟骑行」沿规划路线移动。

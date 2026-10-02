@@ -1,0 +1,30 @@
+server:
+  port: 8080
+
+spring:
+  profiles:
+    active: dev
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 10MB
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    banner: false
+
+waimai:
+  jwt:
+    secret: waimai-jwt-secret-key-please-change-in-production-0123456789
+    access-ttl-hours: 2
+    refresh-ttl-days: 7
+  ai:
+    base-url: http://localhost:8000
+    internal-token: dev-token-123
+  upload:
+    dir: ./uploads
+  frontend:
+    # 后端启动后自动拉起四端前端 dev server，后端关闭时自动停止（Windows/macOS/Linux 通用）
+    auto-start: true

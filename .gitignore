@@ -1,0 +1,36 @@
+# ===== IDE =====
+.idea/
+*.iml
+.vscode/
+*.swp
+
+# ===== Java / Maven =====
+waimai-server/target/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+
+# ===== Node / 前端 =====
+node_modules/
+**/node_modules/
+waimai-web/logs/
+**/logs/
+dist/
+**/dist/
+*.log
+
+# ===== Python / AI 服务 =====
+__pycache__/
+*.pyc
+.venv/
+venv/
+waimai-ai/.env
+
+# ===== 运行时数据（勿提交）=====
+data/
+uploads/
+*.sqlite
+
+# ===== 系统 =====
+.DS_Store
+Thumbs.db

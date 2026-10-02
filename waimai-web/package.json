@@ -1,0 +1,20 @@
+{
+  "name": "waimai-web",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:user": "npm run dev -w apps/user-h5",
+    "dev:rider": "npm run dev -w apps/rider-h5",
+    "dev:merchant": "npm run dev -w apps/merchant-web",
+    "dev:admin": "npm run dev -w apps/admin-web",
+    "build": "npm run build -w apps/user-h5 && npm run build -w apps/rider-h5 && npm run build -w apps/merchant-web && npm run build -w apps/admin-web"
+  },
+  "dependencies": {
+    "@esbuild/win32-x64": "^0.21.5",
+    "@floating-ui/dom": "^1.8.0"
+  }
+}
