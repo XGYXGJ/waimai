@@ -2,7 +2,10 @@
   <div class="home">
     <!-- 顶部定位 + 搜索 -->
     <div class="header">
-      <div class="location">📍 {{ locationText }}</div>
+      <div class="location" @click="locate(true)">
+        <span>📍 {{ locationText }}</span>
+        <span class="relocate">点击刷新 <van-icon name="replay" size="12" /></span>
+      </div>
       <van-search v-model="keyword" placeholder="搜索商家、菜品" shape="round" @search="goSearch" />
     </div>
 
@@ -58,19 +61,24 @@ import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { showToast } from 'vant';
 import { apiHome, apiMerchantList, apiDailyRecommend, apiSaveSearch } from '@/api';
+import { getSavedLocation, setSavedLocation, locationLabel } from '@waimai/shared';
 import type { Merchant, RecommendItem } from '@waimai/shared';
 
 const router = useRouter();
 const keyword = ref('');
-const locationText = ref('定位中...');
+
+// 默认位置 = 上次刷新的位置（缓存于 localStorage）；无缓存时首次进入才自动定位一次
+const cachedLocation = getSavedLocation();
+const lng = ref<number | undefined>(cachedLocation?.lng);
+const lat = ref<number | undefined>(cachedLocation?.lat);
+const locationText = ref(cachedLocation ? locationLabel(cachedLocation) : '定位中...');
+
 const categories = ref<any[]>([]);
 const recommends = ref<RecommendItem[]>([]);
 const merchants = ref<Merchant[]>([]);
 const loading = ref(true);
 const sortType = ref('综合');
 const categoryId = ref<number | undefined>();
-const lng = ref<number | undefined>();
-const lat = ref<number | undefined>();
 
 const sortOptions = ['综合', 'rating', 'sales', 'distance'];
 const sortLabels: Record<string, string> = { 综合: '综合排序', rating: '评分优先', sales: '销量优先', distance: '距离优先' };
@@ -129,30 +137,47 @@ async function loadRecommend() {
   } catch {}
 }
 
-function locate() {
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        lng.value = pos.coords.longitude;
-        lat.value = pos.coords.latitude;
-        locationText.value = `已定位 (${lat.value!.toFixed(2)}, ${lng.value!.toFixed(2)})`;
-        loadHome();
-        loadRecommend();
-      },
-      () => {
-        locationText.value = '默认位置';
-        loadHome();
-        loadRecommend();
-      }
-    );
-  } else {
-    locationText.value = '默认位置';
+function locate(manual = false) {
+  if (!navigator.geolocation) {
+    locationText.value = locationLabel(getSavedLocation());
     loadHome();
     loadRecommend();
+    return;
   }
+  if (manual) showToast('正在重新定位...');
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      lng.value = pos.coords.longitude;
+      lat.value = pos.coords.latitude;
+      // 定位成功即把当前位置存为「默认位置」，下次进入直接复用
+      const saved = setSavedLocation({ lng: lng.value!, lat: lat.value! });
+      locationText.value = locationLabel(saved);
+      if (manual) showToast('定位已刷新');
+      loadHome();
+      loadRecommend();
+    },
+    () => {
+      // 定位失败：沿用上次保存的位置（若有），否则退回默认位置
+      const saved = getSavedLocation();
+      locationText.value = locationLabel(saved);
+      if (manual) showToast(saved ? '定位失败，继续使用上次位置' : '定位失败，请检查定位权限');
+      loadHome();
+      loadRecommend();
+    },
+    { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+  );
 }
 
-onMounted(locate);
+onMounted(() => {
+  if (cachedLocation) {
+    // 有缓存：直接用上次刷新的位置，不再自动定位（直到用户手动点击刷新）
+    loadHome();
+    loadRecommend();
+  } else {
+    // 无缓存：首次进入自动定位一次
+    locate();
+  }
+});
 </script>
 
 <style scoped>
@@ -167,6 +192,17 @@ onMounted(locate);
   color: #fff;
   padding: 0 16px;
   font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+}
+.relocate {
+  font-size: 12px;
+  opacity: 0.85;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
 }
 .categories {
   background: #fff;
