@@ -2,9 +2,16 @@
   <div class="home">
     <!-- 顶部定位 + 搜索 -->
     <div class="header">
-      <div class="location" @click="goLocation">
-        <span>📍 {{ locationText }}</span>
-        <span class="relocate">点击设置 <van-icon name="edit" size="12" /></span>
+      <div class="location">
+        <span class="loc-text" @click="goLocation">📍 {{ locationText }}</span>
+        <span class="loc-actions">
+          <span class="relocate" @click.stop="refreshLocation">
+            <van-icon name="replay" size="12" /> 刷新定位
+          </span>
+          <span class="relocate" @click.stop="goLocation">
+            <van-icon name="edit" size="12" /> 手动设置
+          </span>
+        </span>
       </div>
       <van-search v-model="keyword" placeholder="搜索商家、菜品" shape="round" @search="goSearch" />
     </div>
@@ -144,8 +151,7 @@ async function loadRecommend() {
 function locate(manual = false) {
   if (!navigator.geolocation) {
     locationText.value = locationLabel(getSavedLocation());
-    loadHome();
-    loadRecommend();
+    if (manual) showToast('当前浏览器不支持定位，请使用「手动设置」');
     return;
   }
   if (manual) showToast('正在重新定位...');
@@ -159,17 +165,21 @@ function locate(manual = false) {
       if (manual) showToast('定位已刷新');
       loadHome();
       loadRecommend();
+      loadMerchants();
     },
     () => {
       // 定位失败：沿用上次保存的位置（若有），否则退回默认位置
       const saved = getSavedLocation();
       locationText.value = locationLabel(saved);
-      if (manual) showToast(saved ? '定位失败，继续使用上次位置' : '定位失败，请检查定位权限');
-      loadHome();
-      loadRecommend();
+      if (manual) showToast(saved ? '定位失败，继续使用上次位置' : '定位失败，请使用「手动设置」');
     },
     { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
   );
+}
+
+/** 首页「刷新定位」按钮：重新获取浏览器当前位置并刷新数据 */
+function refreshLocation() {
+  locate(true);
 }
 
 onMounted(() => {
@@ -199,14 +209,30 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
+}
+.loc-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   cursor: pointer;
+}
+.loc-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
 }
 .relocate {
   font-size: 12px;
-  opacity: 0.85;
+  opacity: 0.9;
   display: inline-flex;
   align-items: center;
   gap: 2px;
+  cursor: pointer;
+  white-space: nowrap;
 }
 .categories {
   background: #fff;
