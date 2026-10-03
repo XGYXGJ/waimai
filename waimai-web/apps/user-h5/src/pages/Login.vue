@@ -34,7 +34,7 @@
 import { ref } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { showToast } from 'vant';
-import { setToken } from '@waimai/shared';
+import { setAuth } from '@waimai/shared';
 import { apiLogin, apiRegister } from '@/api';
 
 const router = useRouter();
@@ -50,7 +50,7 @@ const regNickname = ref('');
 async function onLogin() {
   try {
     const res = await apiLogin(phone.value, password.value);
-    setToken(res.accessToken);
+    setAuth(res.accessToken, res.refreshToken);
     showToast('登录成功');
     router.replace((route.query.redirect as string) || '/');
   } catch (e: any) {

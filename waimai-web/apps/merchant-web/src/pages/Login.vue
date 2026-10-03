@@ -42,7 +42,7 @@
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { setToken } from '@waimai/shared';
+import { setAuth } from '@waimai/shared';
 import { apiLogin, apiRegister } from '@/api';
 
 const router = useRouter();
@@ -57,7 +57,7 @@ const regNickname = ref('');
 async function login() {
   try {
     const res = await apiLogin(phone.value, password.value);
-    setToken(res.accessToken);
+    setAuth(res.accessToken, res.refreshToken);
     ElMessage.success('登录成功');
     router.replace('/');
   } catch (e: any) {

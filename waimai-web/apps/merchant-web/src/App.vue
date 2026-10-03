@@ -35,15 +35,18 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { getToken, clearToken, get } from '@waimai/shared';
+import { getToken, clearAuth, isTokenExpired, get } from '@waimai/shared';
 
 const router = useRouter();
-const isLoggedIn = computed(() => !!getToken());
+const isLoggedIn = computed(() => {
+  const t = getToken();
+  return !!t && !isTokenExpired(t);
+});
 const shopName = ref('');
 
 function handleCommand(cmd: string) {
   if (cmd === 'logout') {
-    clearToken();
+    clearAuth();
     router.replace('/login');
   }
 }

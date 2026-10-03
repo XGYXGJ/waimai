@@ -33,7 +33,7 @@
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { showToast } from 'vant';
-import { clearToken } from '@waimai/shared';
+import { clearAuth } from '@waimai/shared';
 import { useUserStore } from '@/stores/user';
 import { apiFavorites } from '@/api';
 
@@ -44,7 +44,7 @@ const showFav = ref(false);
 const favorites = ref<any[]>([]);
 
 function logout() {
-  clearToken();
+  clearAuth();
   showToast('已退出');
   router.replace('/login');
 }
