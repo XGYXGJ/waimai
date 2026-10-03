@@ -65,7 +65,8 @@ public class RecommendService {
                 log.setDishId(sd.dish.getId());
                 log.setMerchantId(sd.dish.getMerchantId());
                 log.setSource(sd.source);
-                log.setScore(BigDecimal.valueOf(sd.finalScore));
+                double safeScore = (Double.isNaN(sd.finalScore) || Double.isInfinite(sd.finalScore)) ? 0.0 : sd.finalScore;
+                log.setScore(BigDecimal.valueOf(safeScore));
                 log.setIsExposed(1);
                 log.setIsClicked(0);
                 log.setIsOrdered(0);
@@ -87,10 +88,21 @@ public class RecommendService {
         Set<Long> nearIds = new HashSet<>();
         for (Merchant m : openMerchants) {
             if (m.getLng() == null || m.getLat() == null) continue;
+            // 未携带定位参数：不做距离过滤，视为全部位于附近
+            if (lng == null || lat == null) {
+                nearIds.add(m.getId());
+                continue;
+            }
             double dist = GeoUtil.distanceKm(
                     lng, lat,
                     m.getLng().doubleValue(), m.getLat().doubleValue());
-            if (lng == null || dist <= 3.0) nearIds.add(m.getId());
+            if (dist <= 3.0) nearIds.add(m.getId());
+        }
+        // 附近无商家时退化为全平台营业商家，保证「每日推荐」非空
+        if (nearIds.isEmpty()) {
+            for (Merchant m : openMerchants) {
+                if (m.getId() != null) nearIds.add(m.getId());
+            }
         }
         if (!nearIds.isEmpty()) {
             List<Dish> hot = dishMapper.selectList(new QueryWrapper<Dish>()
@@ -181,18 +193,24 @@ public class RecommendService {
         double wQuality = sysConfigService.getDouble("recommend.weight.quality", 0.3);
         double wBid = sysConfigService.getDouble("recommend.weight.bid", 0.2);
 
-        // 归一化 base
-        double maxSales = candidates.stream().mapToDouble(s -> s.dish.getMonthlySales()).max().orElse(1);
-        double maxRating = candidates.stream().mapToDouble(s -> s.merchantRating).max().orElse(5);
+        // 归一化 base（销量可能全为 0，需兜底避免 0/0 = NaN）
+        double maxSales = candidates.stream()
+                .mapToDouble(s -> s.dish.getMonthlySales() == null ? 0 : s.dish.getMonthlySales())
+                .max().orElse(1);
+        if (maxSales <= 0) maxSales = 1;
 
         for (ScoredDish s : candidates) {
+            double sales = s.dish.getMonthlySales() == null ? 0 : s.dish.getMonthlySales();
+            double rating = (s.merchantRating > 0) ? s.merchantRating : 4.5;
             double recScore = s.recScore * sourceWeight(s.source);
-            double qualityScore = 0.4 * (s.dish.getMonthlySales() / maxSales)
-                    + 0.4 * (s.merchantRating / 5.0)
-                    + 0.2 * (s.dish.getMonthlySales() / maxSales); // 简化：销量再加权
+            double qualityScore = 0.4 * (sales / maxSales)
+                    + 0.4 * (rating / 5.0)
+                    + 0.2 * (sales / maxSales); // 简化：销量再加权
             double bidScore = 0; // 自然排序场景；竞价场景由 MerchantService 覆盖
             double epsilon = Math.random() * 0.01;
-            s.finalScore = wRec * recScore + wQuality * qualityScore + wBid * bidScore + epsilon;
+            double score = wRec * recScore + wQuality * qualityScore + wBid * bidScore + epsilon;
+            // 防御：任何非有限值（NaN/Infinity）都归零，避免 BigDecimal.valueOf 抛异常
+            s.finalScore = (Double.isNaN(score) || Double.isInfinite(score)) ? 0.0 : score;
         }
         candidates.sort((a, b) -> Double.compare(b.finalScore, a.finalScore));
         return candidates;
