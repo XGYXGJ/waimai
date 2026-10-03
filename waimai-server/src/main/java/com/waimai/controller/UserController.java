@@ -24,9 +24,9 @@ public class UserController {
     }
 
     @PostMapping("/address")
-    public R<Void> saveAddress(@RequestBody WebDTO.AddressReq req) {
-        userService.addressSave(UserContext.userId(), req);
-        return R.ok();
+    public R<Map<String, Object>> saveAddress(@RequestBody WebDTO.AddressReq req) {
+        Long id = userService.addressSave(UserContext.userId(), req);
+        return R.ok(Map.of("id", id));
     }
 
     @PostMapping("/address/{id}/default")

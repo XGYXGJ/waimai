@@ -35,7 +35,7 @@ public class UserService {
                 new QueryWrapper<Address>().eq("user_id", userId).orderByDesc("is_default").orderByDesc("created_at")));
     }
 
-    public void addressSave(Long userId, WebDTO.AddressReq req) {
+    public Long addressSave(Long userId, WebDTO.AddressReq req) {
         Address a = req.getId() == null ? new Address() : requireOwned(req.getId(), userId);
         a.setUserId(userId);
         a.setContact(req.getContact());
@@ -45,10 +45,14 @@ public class UserService {
         a.setCity(req.getCity());
         a.setDistrict(req.getDistrict());
         a.setDetail(req.getDetail());
-        a.setLng(java.math.BigDecimal.valueOf(req.getLng()));
-        a.setLat(java.math.BigDecimal.valueOf(req.getLat()));
+        // 经纬度可空：未在地图上选点时允许只填文字地址
+        a.setLng(req.getLng() == null ? null : java.math.BigDecimal.valueOf(req.getLng()));
+        a.setLat(req.getLat() == null ? null : java.math.BigDecimal.valueOf(req.getLat()));
         a.setTag(req.getTag());
         if (a.getId() == null) {
+            // 首个地址自动设为默认
+            Long count = addressMapper.selectCount(new QueryWrapper<Address>().eq("user_id", userId));
+            a.setIsDefault(count == null || count == 0 ? 1 : 0);
             addressMapper.insert(a);
         } else {
             addressMapper.updateById(a);
@@ -57,6 +61,7 @@ public class UserService {
         if (req.getIsDefault() != null && req.getIsDefault() == 1) {
             setDefault(userId, a.getId());
         }
+        return a.getId();
     }
 
     public void setDefault(Long userId, Long addressId) {

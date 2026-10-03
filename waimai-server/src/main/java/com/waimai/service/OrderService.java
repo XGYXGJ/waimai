@@ -128,10 +128,14 @@ public class OrderService {
         order.setOrderNo(orderNoUtil.next());
         order.setUserId(userId);
         order.setMerchantId(m.getId());
-        order.setAddressSnapshot(JsonUtil.toJson(Map.of(
-                "contact", addr.getContact(), "phone", addr.getPhone(),
-                "detail", addr.getProvince() + addr.getCity() + addr.getDistrict() + addr.getDetail(),
-                "lng", addr.getLng(), "lat", addr.getLat())));
+        Map<String, Object> snap = new LinkedHashMap<>();
+        snap.put("contact", addr.getContact());
+        snap.put("phone", addr.getPhone());
+        snap.put("detail", safeStr(addr.getProvince()) + safeStr(addr.getCity())
+                + safeStr(addr.getDistrict()) + safeStr(addr.getDetail()));
+        snap.put("lng", addr.getLng());
+        snap.put("lat", addr.getLat());
+        order.setAddressSnapshot(JsonUtil.toJson(snap));
         order.setDishAmount(dishAmount);
         order.setDeliveryFee(deliveryFee);
         order.setPackageFee(packageFee);
@@ -172,7 +176,13 @@ public class OrderService {
                 RabbitMQConfig.DELAY_ROUTING_KEY, String.valueOf(order.getId()));
 
         cartService.clearMerchant(userId, m.getId());
-        return Map.of("orderId", order.getId(), "orderNo", order.getOrderNo(), "payAmount", pay);
+        return Map.of("id", order.getId(), "orderId", order.getId(),
+                "orderNo", order.getOrderNo(), "payAmount", pay);
+    }
+
+    /** 地址拼接用：null 视为空串 */
+    private static String safeStr(String s) {
+        return s == null ? "" : s;
     }
 
     /** 模拟支付：PENDING_PAYMENT → PAID */

@@ -9,13 +9,14 @@
 
     <van-cell-group inset>
       <van-cell title="订单号" :value="order.orderNo" />
-      <van-cell title="配送地址" :value="order.addressSnapshot" />
+      <van-cell title="配送地址" :value="addressText" />
       <van-cell title="备注" :value="order.remark || '无'" />
     </van-cell-group>
 
     <van-cell-group inset style="margin-top: 12px">
       <van-cell title="商品金额" :value="`¥${order.dishAmount || 0}`" />
       <van-cell title="配送费" :value="`¥${order.deliveryFee || 0}`" />
+      <van-cell title="打包费" :value="`¥${order.packageFee || 0}`" />
       <van-cell title="优惠" :value="`-¥${order.discountAmount || 0}`" />
       <van-cell title="实付" :value="`¥${order.payAmount || 0}`" />
     </van-cell-group>
@@ -31,7 +32,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { showToast } from 'vant';
 import { apiOrderDetail, apiOrderPay, apiOrderCancel } from '@/api';
@@ -40,6 +41,14 @@ const route = useRoute();
 const router = useRouter();
 const orderId = Number(route.params.id);
 const order = ref<any>({});
+
+const addressText = computed(() => {
+  const a = order.value.address;
+  if (!a) return '—';
+  const detail = a.detail || '（未填写详细地址）';
+  const who = [a.contact, a.phone].filter(Boolean).join(' ');
+  return who ? `${detail}（${who}）` : detail;
+});
 
 const statusText: Record<string, string> = {
   PENDING_PAYMENT: '待支付',

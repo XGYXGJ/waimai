@@ -2,9 +2,9 @@
   <div class="home">
     <!-- 顶部定位 + 搜索 -->
     <div class="header">
-      <div class="location" @click="locate(true)">
+      <div class="location" @click="goLocation">
         <span>📍 {{ locationText }}</span>
-        <span class="relocate">点击刷新 <van-icon name="replay" size="12" /></span>
+        <span class="relocate">点击设置 <van-icon name="edit" size="12" /></span>
       </div>
       <van-search v-model="keyword" placeholder="搜索商家、菜品" shape="round" @search="goSearch" />
     </div>
@@ -104,6 +104,10 @@ function filterCategory(id: number) {
 
 function goMerchant(id: number) {
   router.push(`/merchant/${id}`);
+}
+
+function goLocation() {
+  router.push('/location');
 }
 
 async function loadHome() {

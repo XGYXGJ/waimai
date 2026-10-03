@@ -33,3 +33,54 @@ export function loadAmap(plugins: string[] = []): Promise<boolean> {
   })();
   return pending;
 }
+
+export interface GeoPoint {
+  lng: number;
+  lat: number;
+  address?: string;
+}
+
+/** 地址 → 经纬度（高德地理编码）。失败返回 null */
+export function geocodeAddress(keyword: string): Promise<GeoPoint | null> {
+  return new Promise((resolve) => {
+    const AMap = (window as any).AMap;
+    if (!AMap || !keyword?.trim()) return resolve(null);
+    AMap.plugin('AMap.Geocoder', () => {
+      try {
+        const geocoder = new AMap.Geocoder();
+        geocoder.getLocation(keyword.trim(), (status: string, result: any) => {
+          const g = result?.geocodes?.[0];
+          if (status === 'complete' && g?.location) {
+            resolve({ lng: g.location.lng, lat: g.location.lat, address: g.formattedAddress });
+          } else {
+            resolve(null);
+          }
+        });
+      } catch {
+        resolve(null);
+      }
+    });
+  });
+}
+
+/** 经纬度 → 地址文字（逆地理编码）。失败返回 null */
+export function reverseGeocode(lng: number, lat: number): Promise<string | null> {
+  return new Promise((resolve) => {
+    const AMap = (window as any).AMap;
+    if (!AMap) return resolve(null);
+    AMap.plugin('AMap.Geocoder', () => {
+      try {
+        const geocoder = new AMap.Geocoder();
+        geocoder.getAddress([lng, lat], (status: string, result: any) => {
+          if (status === 'complete' && result?.regeocode) {
+            resolve(result.regeocode.formattedAddress || null);
+          } else {
+            resolve(null);
+          }
+        });
+      } catch {
+        resolve(null);
+      }
+    });
+  });
+}

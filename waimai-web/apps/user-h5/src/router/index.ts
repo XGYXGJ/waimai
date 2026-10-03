@@ -15,6 +15,7 @@ const routes = [
   { path: '/chat', component: () => import('@/pages/Chat.vue') },
   { path: '/profile', component: () => import('@/pages/Profile.vue') },
   { path: '/address', component: () => import('@/pages/Address.vue') },
+  { path: '/location', component: () => import('@/pages/Location.vue') },
   { path: '/coupons', component: () => import('@/pages/Coupons.vue') },
   { path: '/coupon-hall', component: () => import('@/pages/CouponHall.vue') },
 ];
