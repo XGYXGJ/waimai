@@ -54,11 +54,23 @@
               <van-tag v-if="m.isAd" type="warning" plain size="mini">广告</van-tag>
             </div>
             <div class="merchant-meta">⭐ {{ m.rating || 4.5 }} · 月售{{ m.monthlySales || 0 }}</div>
-            <div class="merchant-meta">起送¥{{ m.minOrderAmount || 0 }} · {{ m.distanceKm ? m.distanceKm + 'km' : '' }}</div>
+            <div class="merchant-meta">
+              起送¥{{ m.minOrderAmount || 0 }} · 配送¥{{ money(m.deliveryFee) }}
+              <template v-if="m.distanceKm"> · {{ m.distanceKm }}km</template>
+              <template v-if="m.deliveryRadiusKm">（配送范围{{ m.deliveryRadiusKm }}km）</template>
+            </div>
           </div>
         </div>
-        <van-empty v-if="!merchants.length" description="暂无商家" />
+        <van-empty v-if="!merchants.length" :description="emptyDesc" />
       </div>
+    </div>
+
+    <!-- 购物车悬浮入口：不用进商家详情页也能直接去结算 -->
+    <div class="cart-fab" @click="goCart">
+      <van-badge :content="cartBadge" :show-zero="false" :offset="[-2, 2]">
+        <van-icon name="shopping-cart-o" size="24" color="#fff" />
+      </van-badge>
+      <div class="fab-text">购物车</div>
     </div>
   </div>
 </template>
@@ -67,12 +79,42 @@
 import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { showToast } from 'vant';
-import { apiHome, apiMerchantList, apiDailyRecommend, apiSaveSearch } from '@/api';
+import { apiHome, apiMerchantList, apiDailyRecommend, apiSaveSearch, apiCartList } from '@/api';
 import { getSavedLocation, setSavedLocation, locationLabel } from '@waimai/shared';
 import type { Merchant, RecommendItem } from '@waimai/shared';
 
 const router = useRouter();
 const keyword = ref('');
+
+/** 购物车件数：首页悬浮入口的角标 */
+const cartCount = ref(0);
+const cartBadge = computed(() => (cartCount.value > 99 ? '99+' : String(cartCount.value)));
+
+async function loadCartCount() {
+  try {
+    const data: any = await apiCartList();
+    const records: any[] = data?.records || [];
+    cartCount.value = records.reduce((sum, r) => sum + Number(r.quantity || 0), 0);
+  } catch {
+    // 拿不到就当作 0，不打扰用户
+    cartCount.value = 0;
+  }
+}
+
+function goCart() {
+  router.push('/cart');
+}
+
+function money(v: any) {
+  return Number(v || 0).toFixed(2);
+}
+
+/** 空列表提示：有定位时大概率是「附近商家都不在这个位置的服务范围内」 */
+const emptyDesc = computed(() =>
+  lng.value && lat.value
+    ? '当前位置附近没有可配送的商家，可点上方「刷新定位」或「手动设置」换个位置'
+    : '暂无商家'
+);
 
 // 默认位置 = 上次刷新的位置（缓存于 localStorage）；无缓存时首次进入才自动定位一次
 const cachedLocation = getSavedLocation();
@@ -183,6 +225,8 @@ function refreshLocation() {
 }
 
 onMounted(() => {
+  // 购物车角标每次进首页都重新拉一次（从商家页/购物车返回时会重新挂载）
+  loadCartCount();
   if (cachedLocation) {
     // 有缓存：直接用上次刷新的位置，不再自动定位（直到用户手动点击刷新）
     loadHome();
@@ -316,5 +360,28 @@ onMounted(() => {
   font-size: 12px;
   color: #999;
   margin-top: 4px;
+}
+/* 购物车悬浮入口：停在 tabbar 之上 */
+.cart-fab {
+  position: fixed;
+  right: 16px;
+  bottom: calc(66px + env(safe-area-inset-bottom));
+  z-index: 20;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ff6034, #ff8a3d);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(255, 96, 52, 0.4);
+  cursor: pointer;
+}
+.fab-text {
+  font-size: 9px;
+  margin-top: 1px;
+  line-height: 1;
 }
 </style>

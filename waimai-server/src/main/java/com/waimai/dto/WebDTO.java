@@ -30,6 +30,11 @@ public class WebDTO {
         private Long addressId;
         private Long userCouponId; // 可空
         private String remark;
+        /**
+         * 下单幂等令牌（客户端生成，同一个「下单意图」复用同一个值）。
+         * 连点 / 弱网重试时后端只会落一笔订单；不传则退化为无幂等保护。
+         */
+        private String clientToken;
     }
 
     @Data
@@ -110,6 +115,52 @@ public class WebDTO {
     }
 
     @Data
+    public static class AiModelSaveReq {
+        private Long id;
+        private String name;
+        private String provider;   // zen / openai / ollama
+        private String baseUrl;
+        private String apiKey;
+        private String modelId;
+        private Integer enabled;
+        private Integer priority;
+        private Integer timeout;
+        private String remark;
+    }
+
+    /* ---------- 订单会话 / 售后工单 ---------- */
+
+    /** 发起会话（按订单，已存在则直接返回） */
+    @Data
+    public static class ImOpenReq {
+        private Long orderId;
+    }
+
+    /** 发送消息：TEXT / IMAGE / ORDER */
+    @Data
+    public static class ImSendReq {
+        private String msgType;    // TEXT 文本 / IMAGE 图片 / ORDER 订单卡片
+        private String content;    // 文本正文或图片说明
+        private java.util.List<String> images; // msgType=IMAGE 时的图片 URL 列表
+    }
+
+    /** 发起售后工单：退款 / 赔偿 / 补发 / 其他 */
+    @Data
+    public static class ImTicketReq {
+        private String type;                 // REFUND / COMPENSATE / REISSUE / OTHER
+        private java.math.BigDecimal amount; // 申请金额
+        private String reason;               // 原因
+        private java.util.List<String> images; // 凭证图片
+    }
+
+    /** 商家处理工单 */
+    @Data
+    public static class ImTicketHandleReq {
+        private String action;   // PROCESSING / APPROVED / REJECTED / CLOSED
+        private String reply;    // 处理意见
+    }
+
+    @Data
     public static class ShopUpdateReq {
         private String shopName;
         private String notice;
@@ -122,6 +173,8 @@ public class WebDTO {
         private String businessHours;
         private Double minOrderAmount;
         private Double deliveryFee;
+        /** 配送范围（km）；不传 = 沿用平台默认，传 0 视为「清空为默认」由服务端处理 */
+        private Double deliveryRadiusKm;
         private Double packageFee;
         private Integer openStatus;
     }

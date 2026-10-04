@@ -8,9 +8,11 @@ const routes = [
   { path: '/users', component: () => import('@/pages/Users.vue') },
   { path: '/riders', component: () => import('@/pages/Riders.vue') },
   { path: '/orders', component: () => import('@/pages/Orders.vue') },
+  { path: '/income', component: () => import('@/pages/Income.vue') },
   { path: '/reviews', component: () => import('@/pages/Reviews.vue') },
   { path: '/bid', component: () => import('@/pages/Bid.vue') },
   { path: '/config', component: () => import('@/pages/Config.vue') },
+  { path: '/ai-models', component: () => import('@/pages/AiModels.vue') },
 ];
 
 const router = createRouter({ history: createWebHistory(), routes });

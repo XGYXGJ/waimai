@@ -15,4 +15,7 @@ public class ResultCode {
     public static final int ORDER_STATUS_CHANGED = 40010;
     public static final int GRAB_FAILED = 40011;
     public static final int CART_MERCHANT_CONFLICT = 40012;
+    public static final int REPEAT_SUBMIT = 40013;
+    /** 收货地址超出商家配送范围 */
+    public static final int OUT_OF_DELIVERY_RANGE = 40014;
 }

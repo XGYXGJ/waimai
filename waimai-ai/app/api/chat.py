@@ -17,7 +17,9 @@ def verify_token(x_internal_token: str = Header(default="")):
 
 
 @router.post("/chat")
-async def chat(payload: dict, _: str = Depends(verify_token)):
+def chat(payload: dict, _: str = Depends(verify_token)):
+    # 注意别改回 async def：get_llm() 是同步阻塞调用（zen 一次可能十几秒），
+    # 声明为 async 会占住事件循环，期间连 /health 都不响应。同步 def 由 FastAPI 丢进线程池。
     message = payload.get("message", "")
     intent = route_intent(message)
     order_ctx = payload.get("orderContext") or {}

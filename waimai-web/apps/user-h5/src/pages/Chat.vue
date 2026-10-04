@@ -44,7 +44,8 @@ async function send() {
 .chat-page {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  /* 底部有 van-tabbar（约 50px），必须留出高度，否则输入框被遮住点不到 */
+  height: calc(100vh - 50px);
 }
 .chat-body {
   flex: 1;

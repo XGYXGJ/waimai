@@ -22,8 +22,9 @@ public class OrderController {
     /* ---------- 用户端 ---------- */
 
     @GetMapping("/preview")
-    public R<Map<String, Object>> preview(@RequestParam Long merchantId) {
-        return R.ok(orderService.preview(UserContext.userId(), merchantId));
+    public R<Map<String, Object>> preview(@RequestParam Long merchantId,
+                                          @RequestParam(required = false) Long addressId) {
+        return R.ok(orderService.preview(UserContext.userId(), merchantId, addressId));
     }
 
     @PostMapping

@@ -5,7 +5,7 @@
       <van-tab v-for="t in tabs" :key="t.key" :title="t.label" :name="t.key" />
     </van-tabs>
 
-    <van-list v-model:loading="loading" :finished="finished" @load="load" style="margin-top: 8px">
+    <van-list :key="activeTab" v-model:loading="loading" :finished="finished" @load="load" style="margin-top: 8px">
       <div class="order-card" v-for="o in orders" :key="o.id" @click="goDetail(o.id)">
         <div class="order-head">
           <span>订单号 {{ o.orderNo }}</span>
@@ -13,10 +13,13 @@
         </div>
         <div class="order-info">
           <div>{{ o.merchantName || '商家' }}</div>
-          <div class="order-addr">{{ o.addressSnapshot }}</div>
+          <div class="order-goods" v-if="o.items?.length">
+            {{ o.items[0].dishName }}<span v-if="o.itemCount > 1"> 等 {{ o.itemCount }} 件</span>
+          </div>
+          <div class="order-addr">{{ o.addressText || o.address?.detail || '—' }}</div>
         </div>
         <div class="order-foot">
-          <span class="price">{{ o.payAmount }}</span>
+          <span class="price">¥{{ money(o.payAmount) }}</span>
           <div class="actions">
             <van-button v-if="o.status === 'PENDING_PAYMENT'" size="small" type="primary" color="#ff6034" @click.stop="goPay(o.id)">去支付</van-button>
             <van-button v-if="o.status === 'DELIVERING'" size="small" type="primary" color="#ff6034" @click.stop="goTrack(o.id)">追踪骑手</van-button>
@@ -30,11 +33,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { apiMyOrders } from '@/api';
 
 const router = useRouter();
+function money(v: any) {
+  return Number(v || 0).toFixed(2);
+}
 const tabs = [
   { key: '', label: '全部' },
   { key: 'PENDING_PAYMENT', label: '待支付' },
@@ -46,6 +52,15 @@ const orders = ref<any[]>([]);
 const loading = ref(false);
 const finished = ref(false);
 const page = ref(1);
+
+// 切换 tab 时必须把分页状态重置。之前只改 activeTab 不重新加载，
+// 结果切过去看到的还是上一个 tab 的订单、而且页码已经加到第 N 页。
+watch(activeTab, () => {
+  orders.value = [];
+  page.value = 1;
+  finished.value = false;
+  loading.value = false;
+});
 
 const statusText: Record<string, string> = {
   PENDING_PAYMENT: '待支付',
@@ -104,10 +119,22 @@ async function load() {
 .order-info {
   margin: 8px 0;
 }
+.order-goods {
+  font-size: 13px;
+  color: #666;
+  margin-top: 4px;
+}
 .order-addr {
   font-size: 12px;
   color: #999;
   margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.order-foot .price {
+  color: #ff6034;
+  font-weight: 600;
 }
 .order-foot {
   display: flex;

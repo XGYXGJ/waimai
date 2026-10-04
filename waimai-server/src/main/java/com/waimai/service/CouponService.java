@@ -124,26 +124,65 @@ public class CouponService {
         return Map.of("records", records);
     }
 
-    /** 指定金额下可用的优惠券（下单预览用），附带计算好的优惠额 */
+    /**
+     * 指定金额下可用于该商家的券（下单页预览用），附带算好的优惠额。
+     *
+     * 关键点：**未领取的券也会返回**（received=false、userCouponId=null）。
+     * 券必须先领才会写进 user_coupon，早先这里只扫 user_coupon，
+     * 结果用户不去领券大厅点一下，下单页就永远显示「暂无可用」——
+     * 哪怕商品金额早过了满减门槛。前端选中未领取的券时先调领取接口即可。
+     */
     public List<Map<String, Object>> usable(Long userId, Long merchantId, BigDecimal dishAmount) {
-        List<UserCoupon> ucs = userCouponMapper.selectList(new QueryWrapper<UserCoupon>()
-                .eq("user_id", userId).eq("status", 0));
-        List<Map<String, Object>> result = new ArrayList<>();
+        BigDecimal amount = dishAmount == null ? BigDecimal.ZERO : dishAmount;
         LocalDateTime now = LocalDateTime.now();
-        for (UserCoupon uc : ucs) {
-            Coupon c = couponMapper.selectById(uc.getCouponId());
-            if (c == null || c.getStatus() != 1) continue;
-            if (c.getMerchantId() != 0 && !c.getMerchantId().equals(merchantId)) continue;
-            if (now.isBefore(c.getStartTime()) || now.isAfter(c.getEndTime())) continue;
-            BigDecimal discount = computeDiscount(c, dishAmount);
-            if (discount == null) continue; // 不满足门槛
+
+        // 一次查出该用户名下所有券，区分「已领未用」和「累计领过几张」
+        List<UserCoupon> mineAll = userCouponMapper.selectList(
+                new QueryWrapper<UserCoupon>().eq("user_id", userId));
+        Map<Long, UserCoupon> usableMine = new java.util.HashMap<>();   // 已领且未用
+        Map<Long, Integer> ownedCount = new java.util.HashMap<>();      // 累计领取数（不限状态）
+        for (UserCoupon uc : mineAll) {
+            ownedCount.merge(uc.getCouponId(), 1, Integer::sum);
+            if (uc.getStatus() != null && uc.getStatus() == 0) {
+                usableMine.putIfAbsent(uc.getCouponId(), uc);
+            }
+        }
+
+        // 该商家可用的券（含 merchantId=0 的平台券），不再要求「必须已领取」
+        List<Coupon> candidates = couponMapper.selectList(new QueryWrapper<Coupon>()
+                .eq("status", 1)
+                .in("merchant_id", 0L, merchantId == null ? 0L : merchantId)
+                .le("start_time", now)
+                .ge("end_time", now));
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Coupon c : candidates) {
+            BigDecimal discount = computeDiscount(c, amount);
+            if (discount == null || discount.compareTo(BigDecimal.ZERO) <= 0) continue; // 未达门槛
+
+            boolean soldOut = c.getTotalCount() != null && c.getTotalCount() > 0
+                    && c.getReceivedCount() != null && c.getReceivedCount() >= c.getTotalCount();
+
             Map<String, Object> m = toVo(c);
-            m.put("userCouponId", uc.getId());
             m.put("discountedAmount", discount);
             m.put("usable", true);
+
+            UserCoupon mine = usableMine.get(c.getId());
+            if (mine != null) {
+                m.put("userCouponId", mine.getId());
+                m.put("received", true);
+            } else {
+                int got = ownedCount.getOrDefault(c.getId(), 0);
+                boolean reachLimit = c.getPerUserLimit() != null && got >= c.getPerUserLimit();
+                if (soldOut || reachLimit) continue; // 领不到，不展示，免得点了报错
+                m.put("userCouponId", null);
+                m.put("received", false);
+            }
             result.add(m);
         }
-        result.sort((a, b) -> ((BigDecimal) b.get("discountedAmount")).compareTo((BigDecimal) a.get("discountedAmount")));
+        // 优惠多的排前面，前端默认展示最优的一张
+        result.sort((a, b) -> ((BigDecimal) b.get("discountedAmount"))
+                .compareTo((BigDecimal) a.get("discountedAmount")));
         return result;
     }
 

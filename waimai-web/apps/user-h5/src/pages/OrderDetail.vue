@@ -28,6 +28,9 @@
     <div class="actions" v-if="order.status === 'DELIVERING'">
       <van-button round block type="primary" color="#ff6034" @click="track">追踪骑手</van-button>
     </div>
+    <div class="actions">
+      <van-button round block plain :loading="opening" @click="contactMerchant">联系商家</van-button>
+    </div>
   </div>
 </template>
 
@@ -35,12 +38,27 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { showToast } from 'vant';
-import { apiOrderDetail, apiOrderPay, apiOrderCancel } from '@/api';
+import { apiOrderDetail, apiOrderPay, apiOrderCancel, apiImOpen } from '@/api';
 
 const route = useRoute();
 const router = useRouter();
 const orderId = Number(route.params.id);
 const order = ref<any>({});
+const opening = ref(false);
+
+/** 打开（或创建）该订单与商家的会话 */
+async function contactMerchant() {
+  if (opening.value) return;
+  opening.value = true;
+  try {
+    const session: any = await apiImOpen(orderId);
+    router.push(`/im/${session.id}`);
+  } catch (e: any) {
+    showToast(e.message || '打开会话失败');
+  } finally {
+    opening.value = false;
+  }
+}
 
 const addressText = computed(() => {
   const a = order.value.address;

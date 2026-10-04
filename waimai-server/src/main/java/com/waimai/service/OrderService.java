@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.waimai.common.exception.BizException;
 import com.waimai.common.result.ResultCode;
+import com.waimai.common.util.GeoUtil;
 import com.waimai.common.util.JsonUtil;
 import com.waimai.common.util.OrderNoUtil;
 import com.waimai.config.RabbitMQConfig;
@@ -20,6 +21,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -44,9 +47,11 @@ public class OrderService {
     private final UserMapper userMapper;
     private final RiderMapper riderMapper;
     private final UserBehaviorMapper behaviorMapper;
+    private final ReviewMapper reviewMapper;
     private final CartService cartService;
     private final CouponService couponService;
     private final UserService userService;
+    private final PricingService pricingService;
     private final NotificationService notificationService;
     private final WsPusher wsPusher;
     private final OrderNoUtil orderNoUtil;
@@ -55,12 +60,33 @@ public class OrderService {
 
     /* ================= 下单 ================= */
 
-    /** 下单预览：金额与可用优惠券 */
-    public Map<String, Object> preview(Long userId, Long merchantId) {
+    /**
+     * 下单预览：金额、按距离动态计算的配送费、可用优惠券、是否在配送范围内。
+     *
+     * @param addressId 用户当前选中的收货地址；为空时退回其默认地址。
+     *                  配送费依赖「商家 → 地址」的距离，所以地址一变金额就要重算。
+     */
+    public Map<String, Object> preview(Long userId, Long merchantId, Long addressId) {
         List<Map<String, Object>> items = itemsOfCart(userId, merchantId);
         Merchant m = requireMerchant(merchantId);
+        // 补上库存/上架状态：购物车里的菜可能已经下架或库存不足，
+        // 确认订单页需要据此禁用 stepper、提前提示，而不是等下单才报错。
+        for (Map<String, Object> it : items) {
+            Dish d = dishMapper.selectById(((Number) it.get("dishId")).longValue());
+            if (d != null) {
+                it.put("stock", d.getStock());
+                it.put("dishStatus", d.getStatus());
+            }
+        }
         BigDecimal dishAmount = sumDishAmount(items);
-        BigDecimal deliveryFee = m.getDeliveryFee();
+
+        // ---- 配送费：由距离动态算出，不再是商家写死的值 ----
+        Address addr = resolveAddress(userId, addressId);
+        Double distanceKm = distanceOf(m, addr);
+        BigDecimal deliveryFee = pricingService.deliveryFee(distanceKm == null ? 0 : distanceKm);
+        double radius = pricingService.radiusOf(m.getDeliveryRadiusKm());
+        boolean inRange = pricingService.inRange(m.getDeliveryRadiusKm(), distanceKm);
+
         BigDecimal packageFee = m.getPackageFee() == null ? BigDecimal.ZERO : m.getPackageFee();
         BigDecimal discount = BigDecimal.ZERO;
         // 默认选最优券（满足门槛的 maximum discount）
@@ -70,6 +96,9 @@ public class OrderService {
 
         Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("items", items);
+        resp.put("merchantId", m.getId());
+        resp.put("merchantName", m.getShopName());
+        resp.put("openStatus", m.getOpenStatus());
         resp.put("dishAmount", dishAmount);
         resp.put("deliveryFee", deliveryFee);
         resp.put("packageFee", packageFee);
@@ -77,11 +106,102 @@ public class OrderService {
         resp.put("payAmount", pay);
         resp.put("minOrderAmount", m.getMinOrderAmount());
         resp.put("couponOptions", coupons);
+        // 距离/范围：确认订单页据此提示「超出配送范围」，避免下单才被拒
+        resp.put("hasAddress", addr != null);
+        resp.put("distanceKm", distanceKm == null ? null : round(distanceKm, 3));
+        resp.put("deliveryRadiusKm", radius);
+        resp.put("inRange", inRange);
+        if (!inRange) {
+            resp.put("rangeTip", "收货地址距商家约 " + String.format("%.1f", distanceKm)
+                    + "km，超出该商家的 " + trim(radius) + "km 配送范围");
+        }
         return resp;
     }
 
     @Transactional
     public Map<String, Object> create(Long userId, WebDTO.OrderCreateReq req) {
+        // ================= 幂等（防连点 / 弱网重试产生两笔订单） =================
+        // 三层保护：
+        //   1. client_token 唯一索引  → 数据层面绝对不会重复（最终防线）
+        //   2. 先按 token 反查已有订单 → 顺序重试直接返回原单（最常见路径）
+        //   3. Redis 占位锁            → 并发同 token 时挡住第二个请求，避免撞唯一键
+        String token = normalizeToken(req.getClientToken());
+        if (token != null) {
+            Orders exist = findByIdemToken(userId, token);
+            if (exist != null) {
+                log.info("order idempotent hit: user={} token={} order={}", userId, token, exist.getId());
+                return idemResult(exist);
+            }
+            if (!tryIdemLock(userId, token)) {
+                // 并发同 token：可能另一请求刚提交完，再查一次；查不到就明确告诉用户别重复点
+                Orders hit = findByIdemToken(userId, token);
+                if (hit != null) return idemResult(hit);
+                throw new BizException(ResultCode.REPEAT_SUBMIT, "订单正在提交中，请勿重复提交");
+            }
+        }
+        try {
+            return doCreate(userId, req, token);
+        } catch (RuntimeException ex) {
+            // 没落库就释放占位，否则用户改完地址重试会被自己的令牌挡住
+            releaseIdemLock(userId, token);
+            throw ex;
+        }
+    }
+
+    /** 幂等令牌有效期：覆盖弱网重试的时间窗口（真正的正确性由唯一索引保证） */
+    private static final long IDEM_TTL_SECONDS = 30 * 60;
+
+    /** 规范化令牌：空串视为「未传」（退化为无幂等保护），超长直接拒绝以免撑爆 VARCHAR(64) */
+    private String normalizeToken(String token) {
+        if (token == null) return null;
+        String t = token.trim();
+        if (t.isEmpty()) return null;
+        if (t.length() > 64) throw new BizException(ResultCode.PARAM_ERROR, "clientToken 长度超出限制");
+        return t;
+    }
+
+    private Orders findByIdemToken(Long userId, String token) {
+        if (token == null) return null;
+        return ordersMapper.selectOne(new QueryWrapper<Orders>()
+                .eq("user_id", userId).eq("client_token", token)
+                .orderByDesc("id").last("limit 1"));
+    }
+
+    private boolean tryIdemLock(Long userId, String token) {
+        if (token == null) return true;
+        try {
+            Boolean ok = redis.opsForValue().setIfAbsent("order:idem:" + userId + ":" + token,
+                    "1", Duration.ofSeconds(IDEM_TTL_SECONDS));
+            return Boolean.TRUE.equals(ok);
+        } catch (Exception e) {
+            // Redis 不可用不能连累下单：降级为「只靠 DB 唯一索引」兜底
+            log.warn("idem lock unavailable, degrade to unique index: {}", e.getMessage());
+            return true;
+        }
+    }
+
+    private void releaseIdemLock(Long userId, String token) {
+        if (token == null) return;
+        try {
+            redis.delete("order:idem:" + userId + ":" + token);
+        } catch (Exception ignored) {
+            // 释放失败无所谓：TTL 到期会自动清理
+        }
+    }
+
+    /** 幂等命中：把已经落库的那一单原样返回，前端据此提示「订单已提交」 */
+    private Map<String, Object> idemResult(Orders o) {
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("id", o.getId());
+        r.put("orderId", o.getId());
+        r.put("orderNo", o.getOrderNo());
+        r.put("payAmount", o.getPayAmount());
+        r.put("idempotent", true);
+        return r;
+    }
+
+    /** 真正下单（库存已在调用前扣好，异常时由 doCreate 负责回补） */
+    private Map<String, Object> doCreate(Long userId, WebDTO.OrderCreateReq req, String clientToken) {
         Merchant m = requireMerchant(req.getMerchantId());
         if (m.getOpenStatus() != 1) throw new BizException(ResultCode.SHOP_CLOSED, "店铺已打烊");
 
@@ -90,6 +210,24 @@ public class OrderService {
 
         Address addr = addressMapper.selectById(req.getAddressId());
         if (addr == null || !addr.getUserId().equals(userId)) throw new BizException("收货地址无效");
+
+        // ---- 配送范围校验：超出范围一律不能下单（库存都还没扣） ----
+        Double distanceKm = distanceOf(m, addr);
+        if (!pricingService.inRange(m.getDeliveryRadiusKm(), distanceKm)) {
+            double radius = pricingService.radiusOf(m.getDeliveryRadiusKm());
+            throw new BizException(ResultCode.OUT_OF_DELIVERY_RANGE,
+                    "收货地址距商家约 " + String.format("%.1f", distanceKm) + "km，超出该商家的 "
+                            + trim(radius) + "km 配送范围，请更换地址或选择其他商家");
+        }
+
+        // 加入购物车之后菜品可能被下架：下单前必须再确认一次，
+        // 否则会出现「已下架的菜照样能下单」。
+        for (Map<String, Object> item : items) {
+            Dish d = dishMapper.selectById(((Number) item.get("dishId")).longValue());
+            if (d == null || d.getStatus() != 1) {
+                throw new BizException("「" + item.get("dishName") + "」已下架，请在购物车中移除后重新下单");
+            }
+        }
 
         BigDecimal dishAmount = sumDishAmount(items);
         if (dishAmount.compareTo(m.getMinOrderAmount()) < 0) {
@@ -112,6 +250,21 @@ public class OrderService {
             deducted.add(dishId);
         }
 
+        try {
+            return persistOrder(userId, req, m, addr, items, dishAmount, clientToken, distanceKm);
+        } catch (RuntimeException ex) {
+            // 关键：@Transactional 只回滚 MySQL，Redis 里已扣的库存不会自动回补。
+            // 落库 / 发券 / 发 MQ 任何一步抛异常，这里手动把库存加回去，
+            // 否则一次失败的下单会让库存永久少掉。
+            for (Long d : deducted) restoreStock(d, qtyOf(items, d));
+            throw ex;
+        }
+    }
+
+    /** 扣完库存之后的落库流程（异常时由 doCreate() 负责回补 Redis 库存） */
+    private Map<String, Object> persistOrder(Long userId, WebDTO.OrderCreateReq req, Merchant m,
+                                             Address addr, List<Map<String, Object>> items,
+                                             BigDecimal dishAmount, String clientToken, Double distanceKm) {
         // ---- 优惠券校验 ----
         BigDecimal discount = BigDecimal.ZERO;
         if (req.getUserCouponId() != null) {
@@ -119,9 +272,11 @@ public class OrderService {
             discount = meta.discount;
         }
 
-        BigDecimal deliveryFee = m.getDeliveryFee();
+        // ---- 距离计价 + 分账快照 ----
+        BigDecimal deliveryFee = pricingService.deliveryFee(distanceKm == null ? 0 : distanceKm);
         BigDecimal packageFee = m.getPackageFee() == null ? BigDecimal.ZERO : m.getPackageFee();
         BigDecimal pay = dishAmount.add(deliveryFee).add(packageFee).subtract(discount).max(BigDecimal.valueOf(0.01));
+        PricingService.IncomeSplit split = pricingService.split(dishAmount, packageFee, discount, deliveryFee);
 
         // ---- 落库 ----
         Orders order = new Orders();
@@ -142,6 +297,14 @@ public class OrderService {
         order.setDiscountAmount(discount);
         order.setPayAmount(pay);
         order.setUserCouponId(req.getUserCouponId());
+        order.setClientToken(clientToken);
+        // 距离与分账：全部快照，事后改费率/改配送规则都不会篡改历史账
+        order.setDistanceKm(distanceKm == null ? null : round(distanceKm, 3));
+        order.setMerchantRate(split.merchantRate());
+        order.setRiderRate(split.riderRate());
+        order.setMerchantIncome(split.merchantIncome());
+        order.setRiderIncome(split.riderIncome());
+        order.setPlatformIncome(split.platformIncome());
         order.setStatus("PENDING_PAYMENT");
         order.setRemark(req.getRemark());
         ordersMapper.insert(order);
@@ -183,6 +346,41 @@ public class OrderService {
     /** 地址拼接用：null 视为空串 */
     private static String safeStr(String s) {
         return s == null ? "" : s;
+    }
+
+    /** 取用户地址：指定 id 则校验归属；否则退回默认地址（没有则返回 null） */
+    private Address resolveAddress(Long userId, Long addressId) {
+        if (addressId != null) {
+            Address a = addressMapper.selectById(addressId);
+            if (a == null || !a.getUserId().equals(userId)) throw new BizException("收货地址无效");
+            return a;
+        }
+        List<Address> list = addressMapper.selectList(new QueryWrapper<Address>()
+                .eq("user_id", userId).orderByDesc("is_default").orderByDesc("id").last("limit 1"));
+        return list.isEmpty() ? null : list.get(0);
+    }
+
+    /**
+     * 商家 → 收货地址的直线距离（km）。
+     * 任一方缺坐标（用户只填了文字地址 / 商家没在地图上选点）返回 null，
+     * 此时无法做范围判定，按「放行 + 只收起步费」处理。
+     */
+    private Double distanceOf(Merchant m, Address addr) {
+        if (addr == null || m == null) return null;
+        if (m.getLng() == null || m.getLat() == null || addr.getLng() == null || addr.getLat() == null) return null;
+        if (m.getLng().doubleValue() == 0 || m.getLat().doubleValue() == 0) return null;
+        if (addr.getLng().doubleValue() == 0 || addr.getLat().doubleValue() == 0) return null;
+        return GeoUtil.distanceKm(m.getLng().doubleValue(), m.getLat().doubleValue(),
+                addr.getLng().doubleValue(), addr.getLat().doubleValue());
+    }
+
+    private static BigDecimal round(double v, int scale) {
+        return BigDecimal.valueOf(v).setScale(scale, RoundingMode.HALF_UP);
+    }
+
+    /** 去掉小数末尾多余的 0：5.00 → 5，1.50 → 1.5 */
+    private static String trim(double v) {
+        return BigDecimal.valueOf(v).stripTrailingZeros().toPlainString();
     }
 
     /** 模拟支付：PENDING_PAYMENT → PAID */
@@ -318,7 +516,9 @@ public class OrderService {
                 new QueryWrapper<OrderStatusLog>().eq("order_id", orderId).orderByAsc("created_at")));
         Merchant m = merchantMapper.selectById(order.getMerchantId());
         if (m != null) vo.put("merchantName", m.getShopName());
-        vo.put("address", JsonUtil.fromJson(order.getAddressSnapshot(), Map.class));
+        // 快照可能是空（历史数据/异常写入），fromJson(null) 会直接 NPE
+        vo.put("address", order.getAddressSnapshot() == null || order.getAddressSnapshot().isBlank()
+                ? null : JsonUtil.fromJson(order.getAddressSnapshot(), Map.class));
         if (order.getRiderId() != null) {
             Rider r = riderMapper.selectById(order.getRiderId());
             if (r != null) {
@@ -542,10 +742,55 @@ public class OrderService {
 
     private Map<String, Object> pageWithDetail(QueryWrapper<Orders> qw, int page, int size) {
         Page<Orders> p = ordersMapper.selectPage(new Page<>(page, size), qw);
+        List<Orders> rows = p.getRecords();
         List<Map<String, Object>> records = new ArrayList<>();
-        for (Orders o : p.getRecords()) {
+        if (rows.isEmpty()) {
+            return Map.of("records", records, "total", p.getTotal(), "pages", p.getPages());
+        }
+
+        // 批量取商家名，避免 N+1（订单列表页要显示店铺名）
+        Map<Long, String> shopNames = new HashMap<>();
+        for (Orders o : rows) shopNames.putIfAbsent(o.getMerchantId(), null);
+        if (!shopNames.isEmpty()) {
+            for (Merchant m : merchantMapper.selectBatchIds(shopNames.keySet())) {
+                shopNames.put(m.getId(), m.getShopName());
+            }
+        }
+
+        // 一次性把订单商品捞出来，顺便统计「共几件 / 首件是什么」，避免逐单查
+        Set<Long> orderIds = new HashSet<>();
+        for (Orders o : rows) orderIds.add(o.getId());
+        Map<Long, OrderItem> firstItem = new HashMap<>();
+        Map<Long, Integer> itemCount = new HashMap<>();
+        for (OrderItem oi : orderItemMapper.selectList(
+                new QueryWrapper<OrderItem>().in("order_id", orderIds).orderByAsc("id"))) {
+            firstItem.putIfAbsent(oi.getOrderId(), oi);
+            itemCount.merge(oi.getOrderId(), 1, Integer::sum);
+        }
+
+        // 批量判断「是否已评价」：否则已完成的订单在列表里会一直显示「评价」按钮
+        Set<Long> reviewed = new HashSet<>();
+        for (Review r : reviewMapper.selectList(new QueryWrapper<Review>().in("order_id", orderIds))) {
+            reviewed.add(r.getOrderId());
+        }
+
+        for (Orders o : rows) {
             Map<String, Object> vo = toVo(o);
-            vo.put("items", orderItemMapper.selectList(new QueryWrapper<OrderItem>().eq("order_id", o.getId())));
+            vo.put("merchantName", shopNames.get(o.getMerchantId()));
+            vo.put("reviewed", reviewed.contains(o.getId()));
+            vo.put("itemCount", itemCount.getOrDefault(o.getId(), 0));
+            // 地址快照是 JSON，列表里给「拼好的可读文本」，别把 JSON 直接甩给用户
+            Map<String, Object> addr = null;
+            String snap = o.getAddressSnapshot();
+            if (snap != null && !snap.isBlank()) {
+                addr = JsonUtil.fromJson(snap, Map.class);
+            }
+            if (addr != null) {
+                vo.put("address", addr);
+                vo.put("addressText", addr.get("detail") == null ? "" : String.valueOf(addr.get("detail")));
+            }
+            vo.put("items", firstItem.get(o.getId()) == null
+                    ? List.of() : List.of(firstItem.get(o.getId())));
             records.add(vo);
         }
         return Map.of("records", records, "total", p.getTotal(), "pages", p.getPages());
@@ -563,6 +808,11 @@ public class OrderService {
         vo.put("packageFee", o.getPackageFee());
         vo.put("discountAmount", o.getDiscountAmount());
         vo.put("payAmount", o.getPayAmount());
+        // 距离与分账：商家/骑手端看配送距离，管理端看收入构成
+        vo.put("distanceKm", o.getDistanceKm());
+        vo.put("merchantIncome", o.getMerchantIncome());
+        vo.put("riderIncome", o.getRiderIncome());
+        vo.put("platformIncome", o.getPlatformIncome());
         vo.put("status", o.getStatus());
         vo.put("remark", o.getRemark());
         vo.put("payTime", o.getPayTime());
@@ -571,6 +821,15 @@ public class OrderService {
         vo.put("deliveredTime", o.getDeliveredTime());
         vo.put("cancelReason", o.getCancelReason());
         vo.put("createdAt", o.getCreatedAt());
+        // 待支付订单的支付截止时间：支付页倒计时用。
+        // 与 MQ 延迟队列的 TTL 共用同一个常量，避免两边对不上。
+        if ("PENDING_PAYMENT".equals(o.getStatus()) && o.getCreatedAt() != null) {
+            LocalDateTime deadline = o.getCreatedAt()
+                    .plusMinutes(RabbitMQConfig.ORDER_PAY_TIMEOUT_MINUTES);
+            vo.put("payDeadline", deadline);
+            vo.put("payRemainSeconds",
+                    Math.max(0, Duration.between(LocalDateTime.now(), deadline).getSeconds()));
+        }
         return vo;
     }
 }

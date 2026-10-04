@@ -4,7 +4,7 @@ import json
 from fastapi import APIRouter, HTTPException, Header, Depends
 
 from ..config import settings
-from ..llm.client import get_llm, LlmError
+from ..llm.client import get_llm, parse_json, LlmError
 from ..llm.prompts import RECOMMEND_SYSTEM
 
 router = APIRouter()
@@ -16,7 +16,8 @@ def verify_token(x_internal_token: str = Header(default="")):
 
 
 @router.post("/recommend")
-async def recommend(payload: dict, _: str = Depends(verify_token)):
+def recommend(payload: dict, _: str = Depends(verify_token)):
+    # 同步 def（不要 async）：LLM 调用是阻塞的，交给 FastAPI 线程池执行
     candidates = payload.get("candidates") or []
     context = payload.get("context") or {}
     profile = payload.get("userProfile") or {}
@@ -32,9 +33,9 @@ async def recommend(payload: dict, _: str = Depends(verify_token)):
     ]
     try:
         raw = get_llm().chat(messages, json_mode=True, max_tokens=500)
-        items = json.loads(raw)
+        items = parse_json(raw)
         if isinstance(items, dict) and "items" in items:
             items = items["items"]
         return {"items": items, "degraded": False}
-    except (LlmError, json.JSONDecodeError, Exception):
+    except Exception:      # noqa: BLE001  解析失败/模型全挂 → 交给后端走非 AI 排序
         return {"items": [], "degraded": True}

@@ -125,11 +125,21 @@ function redirectToLogin() {
   window.location.href = '/login';
 }
 
+/** 业务错误：把后端 R.code 带出来，前端才能按错误类型分流处理（而不只是弹一句 msg） */
+export class ApiError extends Error {
+  code: number;
+  constructor(message: string, code: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.code = code;
+  }
+}
+
 instance.interceptors.response.use(
   (resp) => {
     const r = resp.data as R;
     if (r.code !== 200) {
-      return Promise.reject(new Error(r.msg || '请求失败'));
+      return Promise.reject(new ApiError(r.msg || '请求失败', r.code));
     }
     return r.data;
   },
@@ -140,7 +150,8 @@ instance.interceptors.response.use(
       redirectToLogin();
     }
     const msg = err?.response?.data?.msg || err.message || '网络错误';
-    return Promise.reject(new Error(msg));
+    // 网络层错误也带上 code（HTTP 状态码，无响应时为 0），方便上层区分「连不上」和「业务失败」
+    return Promise.reject(new ApiError(msg, status || 0));
   }
 );
 

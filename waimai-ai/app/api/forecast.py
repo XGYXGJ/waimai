@@ -13,14 +13,22 @@ def verify_token(x_internal_token: str = Header(default="")):
 
 
 @router.post("/forecast")
-async def forecast(payload: dict, _: str = Depends(verify_token)):
-    dishes = payload.get("dishes") or []
-    items = []
+def forecast(payload: dict, _: str = Depends(verify_token)):
+    """纯算法，无 LLM 调用，所以不需要降级链；但要防止脏数据把接口打崩。"""
+    dishes = payload.get("dishes")
+    if not isinstance(dishes, list):
+        dishes = []
+    items, degraded = [], False
     for d in dishes:
-        f = forecast_dish(d.get("sales") or [])
+        if not isinstance(d, dict):
+            continue
+        try:
+            f = forecast_dish(d.get("sales") or [])
+        except Exception:      # noqa: BLE001  单条菜品数据异常不该拖垮整张预测表
+            f, degraded = 0, True
         items.append({
             "dishId": d.get("dishId"),
             "forecast": f,
             "suggestion": int(f * 1.1),
         })
-    return {"items": items, "degraded": False}
+    return {"items": items, "degraded": degraded}

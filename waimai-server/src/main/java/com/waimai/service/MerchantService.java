@@ -29,6 +29,7 @@ public class MerchantService {
     private final OrderItemMapper orderItemMapper;
     private final UserService userService;
     private final BidService bidService;
+    private final PricingService pricingService;
 
     /* ---------- 用户侧 ---------- */
 
@@ -65,10 +66,14 @@ public class MerchantService {
             qw.and(w -> w.like("shop_name", keyword)
                     .or(dishMerchantIds.size() > 0, w2 -> w2.in("id", dishMerchantIds)));
         }
-        // 地理范围粗筛（约3km矩形）
+        // 地理范围粗筛：包围盒半径取「平台默认范围」与「商家可设上限」的较大者，
+        // 保证自定义了更大配送范围的商家不会被粗筛提前筛掉（精确过滤在下面按各自半径做）
         if (lng != null && lat != null) {
-            qw.between("lng", lng - 0.035, lng + 0.035)
-              .between("lat", lat - 0.03, lat + 0.03);
+            double boxKm = Math.max(pricingService.defaultRadiusKm(), PricingService.MAX_RADIUS_KM);
+            double dLat = boxKm / 111.0;
+            double dLng = boxKm / (111.0 * Math.max(0.2, Math.cos(Math.toRadians(lat))));
+            qw.between("lng", lng - dLng, lng + dLng)
+              .between("lat", lat - dLat, lat + dLat);
         }
         List<Merchant> all = merchantMapper.selectList(qw);
 
@@ -76,6 +81,8 @@ public class MerchantService {
         List<Map<String, Object>> natural = new ArrayList<>();
         double maxSales = all.stream().mapToDouble(Merchant::getMonthlySales).max().orElse(1);
         for (Merchant m : all) {
+            // 超出配送范围的商家：首页/列表都不展示（服务端统一把关，前端不用再判）
+            if (!inDeliveryRange(m, lng, lat)) continue;
             Map<String, Object> vo = toVo(m, lng, lat);
             double quality = 0.6 * GeoUtil.normalize(m.getMonthlySales(), 0, maxSales)
                     + 0.4 * (m.getRating().doubleValue() / 5.0);
@@ -97,6 +104,8 @@ public class MerchantService {
                 Long mid = ((Number) ad.get("merchantId")).longValue();
                 Merchant am = merchantMapper.selectById(mid);
                 if (am == null) continue;
+                // 广告位同样受配送范围约束：超出范围强行展示会导致点进去也下不了单
+                if (!inDeliveryRange(am, lng, lat)) continue;
                 Map<String, Object> vo = toVo(am, lng, lat);
                 vo.put("isAd", true);
                 vo.put("adCampaignId", ad.get("campaignId"));
@@ -142,6 +151,18 @@ public class MerchantService {
 
     private Long UserContextUserId() {
         return com.waimai.common.context.UserContext.userId();
+    }
+
+    /** 用户坐标是否落在商家配送范围内；无坐标时不做限制（否则没定位就看不到任何商家） */
+    private boolean inDeliveryRange(Merchant m, Double lng, Double lat) {
+        Double km = rawDistanceKm(m, lng, lat);
+        return pricingService.inRange(m.getDeliveryRadiusKm(), km);
+    }
+
+    /** 商家 → 用户坐标的直线距离（km）；任一方缺坐标返回 null */
+    private Double rawDistanceKm(Merchant m, Double lng, Double lat) {
+        if (lng == null || lat == null || m.getLng() == null || m.getLat() == null) return null;
+        return GeoUtil.distanceKm(lng, lat, m.getLng().doubleValue(), m.getLat().doubleValue());
     }
 
     /** 商家详情：商家 + 菜品分类 + 菜品 */
@@ -203,6 +224,18 @@ public class MerchantService {
         if (req.getBusinessHours() != null) m.setBusinessHours(req.getBusinessHours());
         if (req.getMinOrderAmount() != null) m.setMinOrderAmount(BigDecimal.valueOf(req.getMinOrderAmount()));
         if (req.getDeliveryFee() != null) m.setDeliveryFee(BigDecimal.valueOf(req.getDeliveryFee()));
+        // 配送范围：<=0 视为「清空」，回落到平台默认值
+        if (req.getDeliveryRadiusKm() != null) {
+            double r = req.getDeliveryRadiusKm();
+            if (r <= 0) {
+                m.setDeliveryRadiusKm(null);
+            } else if (r < PricingService.MIN_RADIUS_KM || r > PricingService.MAX_RADIUS_KM) {
+                throw new BizException("配送范围需在 " + PricingService.MIN_RADIUS_KM
+                        + " ~ " + PricingService.MAX_RADIUS_KM + " km 之间");
+            } else {
+                m.setDeliveryRadiusKm(BigDecimal.valueOf(r));
+            }
+        }
         if (req.getPackageFee() != null) m.setPackageFee(BigDecimal.valueOf(req.getPackageFee()));
         if (req.getOpenStatus() != null) m.setOpenStatus(req.getOpenStatus());
         merchantMapper.updateById(m);
@@ -271,18 +304,21 @@ public class MerchantService {
         vo.put("lat", m.getLat());
         vo.put("businessHours", m.getBusinessHours());
         vo.put("minOrderAmount", m.getMinOrderAmount());
-        vo.put("deliveryFee", m.getDeliveryFee());
+        // 配送费按「当前用户 → 商家」的距离动态算；没有坐标时退回起步费
+        Double km = rawDistanceKm(m, lng, lat);
+        vo.put("deliveryFee", pricingService.deliveryFee(km == null ? 0 : km));
+        vo.put("deliveryRadiusKm", pricingService.radiusOf(m.getDeliveryRadiusKm()));
         vo.put("packageFee", m.getPackageFee());
         vo.put("rating", m.getRating());
         vo.put("monthlySales", m.getMonthlySales());
         vo.put("openStatus", m.getOpenStatus());
         vo.put("auditStatus", m.getAuditStatus());
-        if (lng != null && lat != null && m.getLng() != null && m.getLat() != null) {
-            double km = GeoUtil.distanceKm(lng, lat,
-                    m.getLng().doubleValue(), m.getLat().doubleValue());
+        if (km != null) {
             vo.put("distanceKm", Math.round(km * 10) / 10.0);
+            vo.put("inRange", pricingService.inRange(m.getDeliveryRadiusKm(), km));
         } else {
             vo.put("distanceKm", 0);
+            vo.put("inRange", true);
         }
         return vo;
     }

@@ -8,9 +8,11 @@
         <el-menu-item index="/users"><el-icon><User /></el-icon>用户管理</el-menu-item>
         <el-menu-item index="/riders"><el-icon><Van /></el-icon>骑手管理</el-menu-item>
         <el-menu-item index="/orders"><el-icon><List /></el-icon>订单管理</el-menu-item>
+        <el-menu-item index="/income"><el-icon><Money /></el-icon>收入结算</el-menu-item>
         <el-menu-item index="/reviews"><el-icon><ChatDotRound /></el-icon>评价治理</el-menu-item>
         <el-menu-item index="/bid"><el-icon><TrendCharts /></el-icon>竞价管理</el-menu-item>
         <el-menu-item index="/config"><el-icon><Setting /></el-icon>系统参数</el-menu-item>
+        <el-menu-item index="/ai-models"><el-icon><Cpu /></el-icon>AI 模型</el-menu-item>
       </el-menu>
     </el-aside>
     <el-container>

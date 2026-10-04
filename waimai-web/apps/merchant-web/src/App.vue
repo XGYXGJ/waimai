@@ -11,6 +11,7 @@
         <el-menu-item index="/bid"><el-icon><TrendCharts /></el-icon>竞价投放</el-menu-item>
         <el-menu-item index="/forecast"><el-icon><DataAnalysis /></el-icon>销量预测</el-menu-item>
         <el-menu-item index="/reviews"><el-icon><ChatDotRound /></el-icon>评价管理</el-menu-item>
+        <el-menu-item index="/im"><el-icon><ChatLineRound /></el-icon>顾客会话</el-menu-item>
       </el-menu>
     </el-aside>
     <el-container>

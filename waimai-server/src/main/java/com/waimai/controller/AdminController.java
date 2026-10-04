@@ -107,4 +107,19 @@ public class AdminController {
     public R<Map<String, Object>> dashboard() {
         return R.ok(adminService.dashboard());
     }
+
+    /* ---------- 收入结算 ---------- */
+
+    /** 收入总览：今日/近7天/本月/累计 的 GMV 与平台、商家、骑手三方收入 */
+    @GetMapping("/income/overview")
+    public R<Map<String, Object>> incomeOverview() {
+        return R.ok(adminService.incomeOverview());
+    }
+
+    /** 按商家汇总收入明细 */
+    @GetMapping("/income/merchants")
+    public R<Map<String, Object>> incomeByMerchant(@RequestParam(defaultValue = "1") int page,
+                                                   @RequestParam(defaultValue = "10") int size) {
+        return R.ok(adminService.incomeByMerchant(page, size));
+    }
 }

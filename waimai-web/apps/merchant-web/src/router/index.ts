@@ -11,6 +11,7 @@ const routes = [
   { path: '/bid', component: () => import('@/pages/Bid.vue') },
   { path: '/forecast', component: () => import('@/pages/Forecast.vue') },
   { path: '/reviews', component: () => import('@/pages/Reviews.vue') },
+  { path: '/im', component: () => import('@/pages/Im.vue') },
 ];
 
 const router = createRouter({ history: createWebHistory(), routes });

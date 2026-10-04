@@ -156,6 +156,14 @@ public class DataInitializer implements CommandLineRunner {
         putIfAbsent("rec.weight_rec", "0.5", "推荐分权重");
         putIfAbsent("rec.weight_quality", "0.3", "质量分权重");
         putIfAbsent("rec.weight_bid", "0.2", "竞价分权重");
+        // 配送范围 / 距离计价 / 平台抽成（管理端「系统参数」可改，改完即时生效）
+        putIfAbsent("delivery.radius_km", "5.00", "平台默认配送范围(km)，商家未单独设置时生效");
+        putIfAbsent("delivery.base_fee", "3.00", "配送起步费(元)");
+        putIfAbsent("delivery.per_km_fee", "1.50", "超出免费距离后每公里配送费(元/km)");
+        putIfAbsent("delivery.free_distance_km", "1.00", "起步费包含的免费距离(km)");
+        putIfAbsent("delivery.max_fee", "0.00", "单笔配送费上限(元)，0 表示不限制");
+        putIfAbsent("commission.merchant.rate", "0.10", "平台对商家的抽成比例(0~1)");
+        putIfAbsent("commission.rider.rate", "0.05", "平台对骑手的抽成比例(0~1)");
     }
 
     private void putIfAbsent(String key, String value, String desc) {

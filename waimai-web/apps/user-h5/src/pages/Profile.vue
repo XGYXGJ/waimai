@@ -17,6 +17,11 @@
       <van-cell title="我的收藏" is-link @click="showFav = true" />
     </van-cell-group>
 
+    <van-cell-group inset style="margin-top: 12px">
+      <van-cell title="我的消息" is-link to="/im" />
+      <van-cell title="我的售后工单" is-link to="/tickets" />
+    </van-cell-group>
+
     <div style="margin: 24px 16px">
       <van-button round block plain type="danger" @click="logout">退出登录</van-button>
     </div>

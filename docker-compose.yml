@@ -1,11 +1,19 @@
 services:
+  # 本项目日常开发用的是「宿主机自带的 MySQL」（数据全在里面），
+  # 这个容器只是备用的空库，正常不需要启动。
+  #
+  # 宿主机端口特意映射到 3307 而不是 3306：ai 服务写了 depends_on: mysql，
+  # 所以任何 `docker compose up -d` 都会顺手把它拉起来，若还是 3306 就会和
+  # 本机 MySQL 抢端口，报 "ports are not available" 并中断整条启动流程。
+  # 想用这个容器：docker compose up -d mysql，连接串改 127.0.0.1:3307
+  # 只想重建 AI 服务而不白拉这个容器：docker compose up -d --no-deps ai
   mysql:
     image: mysql:8.0
     container_name: waimai-mysql
     environment:
       MYSQL_ROOT_PASSWORD: waimai123
       MYSQL_DATABASE: waimai
-    ports: ["3306:3306"]
+    ports: ["3307:3306"]
     volumes: ["./data/mysql:/var/lib/mysql"]
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_general_ci
 
@@ -35,9 +43,23 @@ services:
     build: ./waimai-ai
     container_name: waimai-ai
     ports: ["8000:8000"]
+    depends_on: [mysql]
+    # 让容器内可访问宿主机（本机 Ollama、本机 MySQL 都在宿主机上）
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # 模型池配置存在 MySQL 的 ai_model 表里，容器必须能连上同一库。
+    # 默认指向宿主机（本机安装的 MySQL），如需改用 compose 里的 mysql 容器，
+    # 在 .env 里设 AI_MYSQL_HOST=mysql AI_MYSQL_PASSWORD=waimai123 即可。
     environment:
       INTERNAL_TOKEN: dev-token-123
       OLLAMA_BASE_URL: http://host.docker.internal:11434
+      MYSQL_HOST: ${AI_MYSQL_HOST:-host.docker.internal}
+      MYSQL_PORT: ${AI_MYSQL_PORT:-3306}
+      MYSQL_USER: ${AI_MYSQL_USER:-root}
+      MYSQL_PASSWORD: ${AI_MYSQL_PASSWORD:-qaz84883233}
+      MYSQL_DB: ${AI_MYSQL_DB:-waimai}
+    # 模型池快照持久化：MySQL 短暂不可用时按上一次配置继续降级调用
+    volumes: ["./waimai-ai/data:/app/data"]
 
   nginx:
     image: nginx:alpine

@@ -22,7 +22,8 @@ export const apiCartUpdate = (dishId: number, quantity: number) => post('/cart/u
 export const apiCartClear = () => del('/cart/clear');
 
 // 订单
-export const apiOrderPreview = (merchantId: number) => get('/order/preview', { merchantId });
+// 配送费按「商家 → 收货地址」的距离动态计算，所以传 addressId 才能拿到真实配送费
+export const apiOrderPreview = (merchantId: number, addressId?: number) => get('/order/preview', { merchantId, addressId });
 export const apiOrderCreate = (data: any) => post<Order>('/order', data);
 export const apiOrderPay = (id: number) => post(`/order/${id}/pay`);
 export const apiOrderCancel = (id: number) => post(`/order/${id}/cancel`);
@@ -51,6 +52,26 @@ export const apiMerchantReviews = (merchantId: number) => get(`/review/merchant/
 
 // AI 客服
 export const apiChat = (content: string) => post<{ reply: string; intent: string; degraded: boolean }>('/ai/chat', { content });
+
+// 图片上传（会话凭证、工单图片）
+export const apiUpload = async (file: File): Promise<string> => {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res: any = await post('/common/upload', fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return res?.url || '';
+};
+
+// 订单会话（用户 ↔ 商家）
+export const apiImSessions = () => get('/im/sessions');
+export const apiImOpen = (orderId: number) => post('/im/session/open', { orderId });
+export const apiImMessages = (sessionId: number, sinceId?: number) =>
+  get(`/im/session/${sessionId}/messages`, sinceId ? { sinceId } : {});
+export const apiImSend = (sessionId: number, data: any) => post(`/im/session/${sessionId}/send`, data);
+export const apiImTicketCreate = (sessionId: number, data: any) =>
+  post(`/im/session/${sessionId}/ticket`, data);
+export const apiImTickets = () => get('/im/tickets');
 
 // 通知
 export const apiNotifications = (page = 1, size = 20) => get('/notification', { page, size });

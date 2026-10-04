@@ -36,15 +36,25 @@ public class UserService {
     }
 
     public Long addressSave(Long userId, WebDTO.AddressReq req) {
+        // 之前这里不做任何校验，字段缺失/为空会直接捅到数据库抛
+        // DataIntegrityViolationException，前端只看到「系统繁忙」。
+        if (isBlank(req.getContact())) throw new BizException("请填写联系人");
+        String phone = req.getPhone() == null ? "" : req.getPhone().trim();
+        if (!phone.matches("^1\\d{10}$")) throw new BizException("请填写正确的 11 位手机号");
+        if (isBlank(req.getDetail())) throw new BizException("请填写详细地址（方便骑手送达）");
+
         Address a = req.getId() == null ? new Address() : requireOwned(req.getId(), userId);
         a.setUserId(userId);
-        a.setContact(req.getContact());
-        a.setPhone(req.getPhone());
+        a.setContact(req.getContact().trim());
+        a.setPhone(phone);
         a.setGender(req.getGender() == null ? 1 : req.getGender());
-        a.setProvince(req.getProvince());
-        a.setCity(req.getCity());
-        a.setDistrict(req.getDistrict());
-        a.setDetail(req.getDetail());
+        // 省市区表单不采集，统一存空串而不是 null：
+        // MyBatis-Plus 会跳过 null 字段，列在 INSERT 里直接消失，
+        // 一旦该列 NOT NULL 无默认值就会报 "doesn't have a default value"。
+        a.setProvince(blankToEmpty(req.getProvince()));
+        a.setCity(blankToEmpty(req.getCity()));
+        a.setDistrict(blankToEmpty(req.getDistrict()));
+        a.setDetail(req.getDetail().trim());
         // 经纬度可空：未在地图上选点时允许只填文字地址
         a.setLng(req.getLng() == null ? null : java.math.BigDecimal.valueOf(req.getLng()));
         a.setLat(req.getLat() == null ? null : java.math.BigDecimal.valueOf(req.getLat()));
@@ -86,6 +96,14 @@ public class UserService {
             throw new BizException(ResultCode.NOT_FOUND, "地址不存在");
         }
         return a;
+    }
+
+    private boolean isBlank(String s) {
+        return s == null || s.isBlank();
+    }
+
+    private String blankToEmpty(String s) {
+        return s == null ? "" : s.trim();
     }
 
     /* ---------- 收藏 ---------- */

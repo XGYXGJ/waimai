@@ -41,7 +41,13 @@
       <el-form-item label="地址"><el-input v-model="form.address" /></el-form-item>
       <el-form-item label="营业时间"><el-input v-model="form.businessHours" placeholder="如 09:00-22:00" /></el-form-item>
       <el-form-item label="起送价"><el-input-number v-model="form.minOrderAmount" :min="0" :precision="2" /></el-form-item>
-      <el-form-item label="配送费"><el-input-number v-model="form.deliveryFee" :min="0" :precision="2" /></el-form-item>
+      <el-form-item label="配送范围">
+        <el-input-number v-model="form.deliveryRadiusKm" :min="0.5" :max="20" :step="0.5" :precision="1" />
+        <span class="field-hint">km（以店铺位置为圆心，超出范围的顾客看不到本店、也下不了单；留空/0 表示使用平台默认范围）</span>
+      </el-form-item>
+      <el-form-item label="配送费">
+        <span class="field-hint">配送费由平台按「距离」动态计算，无需在此设置。当前规则：起步费 + 超里程费用，可在管理端「系统参数」调整。</span>
+      </el-form-item>
       <el-form-item label="打包费"><el-input-number v-model="form.packageFee" :min="0" :precision="2" /></el-form-item>
       <el-form-item label="营业状态">
         <el-switch v-model="form.openStatus" :active-value="1" :inactive-value="0" />
@@ -155,7 +161,7 @@ async function save() {
       lat: Number(form.value.lat),
       businessHours: form.value.businessHours,
       minOrderAmount: form.value.minOrderAmount,
-      deliveryFee: form.value.deliveryFee,
+      deliveryRadiusKm: form.value.deliveryRadiusKm,
       packageFee: form.value.packageFee,
       openStatus: form.value.openStatus,
     });
@@ -247,5 +253,11 @@ onUnmounted(() => {
 .coords-row {
   display: flex;
   gap: 8px;
+}
+.field-hint {
+  margin-left: 8px;
+  color: #909399;
+  font-size: 12px;
+  line-height: 1.5;
 }
 </style>

@@ -27,6 +27,11 @@ public class AdminService {
     private final ReviewMapper reviewMapper;
     private final BidCampaignMapper bidCampaignMapper;
     private final OrderService orderService;
+    private final PricingService pricingService;
+
+    /** 计入收入统计的订单状态：已支付且未被退款/取消 */
+    private static final List<String> SETTLED_STATUS =
+            List.of("PAID", "ACCEPTED", "WAITING_PICKUP", "DELIVERING", "DELIVERED");
 
     /* ---------- 商户 ---------- */
 
@@ -176,7 +181,127 @@ public class AdminService {
         result.put("riderOnline", riderOnline);
         result.put("userCount", userMapper.selectCount(null));
         result.put("orderCount", ordersMapper.selectCount(null));
+        // 收入构成（平台/商家/骑手），大屏与「收入结算」页共用同一套口径
+        result.put("income", incomeOverview());
         return result;
+    }
+
+    /* ---------- 收入结算 ---------- */
+
+    /**
+     * 收入总览：GMV 与三方收入（今日 / 近7天 / 本月 / 累计）。
+     * 收入取订单上的快照字段（下单时锁定费率），所以在这里改抽成比例不会篡改历史账目。
+     */
+    public Map<String, Object> incomeOverview() {
+        LocalDate today = LocalDate.now();
+        LocalDateTime now = LocalDateTime.now();
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("today", incomeIn(today.atStartOfDay(), now));
+        resp.put("week", incomeIn(today.minusDays(6).atStartOfDay(), now));
+        resp.put("month", incomeIn(today.withDayOfMonth(1).atStartOfDay(), now));
+        resp.put("total", incomeIn(null, null));
+        // 当前生效的费率与计价规则，管理端页面直接展示，避免「数字对不上」的疑问
+        Map<String, Object> rate = new LinkedHashMap<>();
+        rate.put("merchantRate", pricingService.merchantRate());
+        rate.put("riderRate", pricingService.riderRate());
+        resp.put("rate", rate);
+        Map<String, Object> rule = new LinkedHashMap<>();
+        rule.put("baseFee", pricingService.baseFee());
+        rule.put("perKmFee", pricingService.perKmFee());
+        rule.put("freeDistanceKm", pricingService.freeDistanceKm());
+        rule.put("maxFee", pricingService.maxFee());
+        rule.put("radiusKm", pricingService.defaultRadiusKm());
+        resp.put("rule", rule);
+        return resp;
+    }
+
+    /** 单个时间窗口内的收入汇总 */
+    private Map<String, Object> incomeIn(LocalDateTime from, LocalDateTime to) {
+        QueryWrapper<Orders> qw = new QueryWrapper<Orders>().in("status", SETTLED_STATUS);
+        if (from != null) qw.ge("created_at", from);
+        if (to != null) qw.lt("created_at", to);
+        List<Orders> list = ordersMapper.selectList(qw);
+
+        BigDecimal gmv = BigDecimal.ZERO, merchant = BigDecimal.ZERO,
+                rider = BigDecimal.ZERO, platform = BigDecimal.ZERO;
+        for (Orders o : list) {
+            gmv = gmv.add(nz(o.getPayAmount()));
+            merchant = merchant.add(nz(o.getMerchantIncome()));
+            rider = rider.add(nz(o.getRiderIncome()));
+            platform = platform.add(nz(o.getPlatformIncome()));
+        }
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("gmv", gmv);
+        m.put("platformIncome", platform);
+        m.put("merchantIncome", merchant);
+        m.put("riderIncome", rider);
+        m.put("orderCount", list.size());
+        return m;
+    }
+
+    /** 按商家汇总收入（管理端「收入结算」页表格），按 GMV 倒序分页 */
+    public Map<String, Object> incomeByMerchant(int page, int size) {
+        List<Orders> all = ordersMapper.selectList(new QueryWrapper<Orders>()
+                .select("merchant_id", "pay_amount", "dish_amount", "package_fee", "discount_amount",
+                        "delivery_fee", "merchant_income", "rider_income", "platform_income")
+                .in("status", SETTLED_STATUS));
+
+        Map<Long, Map<String, Object>> agg = new LinkedHashMap<>();
+        for (Orders o : all) {
+            Map<String, Object> row = agg.computeIfAbsent(o.getMerchantId(), k -> {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("merchantId", k);
+                m.put("orderCount", 0);
+                m.put("gmv", BigDecimal.ZERO);
+                m.put("dishAmount", BigDecimal.ZERO);
+                m.put("deliveryFee", BigDecimal.ZERO);
+                m.put("merchantIncome", BigDecimal.ZERO);
+                m.put("riderIncome", BigDecimal.ZERO);
+                m.put("platformIncome", BigDecimal.ZERO);
+                return m;
+            });
+            add(row, "orderCount", 1);
+            add(row, "gmv", nz(o.getPayAmount()));
+            add(row, "dishAmount", nz(o.getDishAmount()).add(nz(o.getPackageFee())).subtract(nz(o.getDiscountAmount())));
+            add(row, "deliveryFee", nz(o.getDeliveryFee()));
+            add(row, "merchantIncome", nz(o.getMerchantIncome()));
+            add(row, "riderIncome", nz(o.getRiderIncome()));
+            add(row, "platformIncome", nz(o.getPlatformIncome()));
+        }
+
+        List<Map<String, Object>> rows = new ArrayList<>(agg.values());
+        rows.sort((a, b) -> ((BigDecimal) b.get("gmv")).compareTo((BigDecimal) a.get("gmv")));
+
+        // 补商家名
+        if (!rows.isEmpty()) {
+            List<Long> ids = rows.stream().map(r -> (Long) r.get("merchantId")).toList();
+            Map<Long, String> names = new HashMap<>();
+            for (Merchant m : merchantMapper.selectBatchIds(ids)) names.put(m.getId(), m.getShopName());
+            for (Map<String, Object> r : rows) {
+                r.put("shopName", names.getOrDefault((Long) r.get("merchantId"), "商家#" + r.get("merchantId")));
+            }
+        }
+
+        int total = rows.size();
+        int from = Math.min(Math.max(0, (page - 1) * size), total);
+        int to = Math.min(from + size, total);
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("records", rows.subList(from, to));
+        resp.put("total", total);
+        resp.put("pages", size <= 0 ? 0 : (total + size - 1) / size);
+        return resp;
+    }
+
+    private void add(Map<String, Object> row, String key, Object delta) {
+        if (delta instanceof Integer i) {
+            row.put(key, ((Integer) row.get(key)) + i);
+        } else {
+            row.put(key, ((BigDecimal) row.get(key)).add((BigDecimal) delta));
+        }
+    }
+
+    private static BigDecimal nz(BigDecimal v) {
+        return v == null ? BigDecimal.ZERO : v;
     }
 
     private BigDecimal sumPayAmount(LocalDateTime from, LocalDateTime to) {

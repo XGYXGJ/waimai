@@ -19,6 +19,12 @@ public class RabbitMQConfig {
     public static final String TIMEOUT_ROUTING_KEY = "order.timeout";
     public static final String DELAY_ROUTING_KEY = "order.delay";
 
+    /**
+     * 未支付订单自动取消时长（分钟）。
+     * 延迟队列 TTL 与前端支付页倒计时共用这一个常量，避免两边各写一份而对不上。
+     */
+    public static final int ORDER_PAY_TIMEOUT_MINUTES = 15;
+
     @Bean
     public DirectExchange delayExchange() {
         return new DirectExchange(DELAY_EXCHANGE);
@@ -27,7 +33,7 @@ public class RabbitMQConfig {
     @Bean
     public Queue delayQueue() {
         return QueueBuilder.durable(DELAY_QUEUE)
-                .ttl(15 * 60 * 1000)
+                .ttl(ORDER_PAY_TIMEOUT_MINUTES * 60 * 1000)
                 .deadLetterExchange(DLX_EXCHANGE)
                 .deadLetterRoutingKey(TIMEOUT_ROUTING_KEY)
                 .build();

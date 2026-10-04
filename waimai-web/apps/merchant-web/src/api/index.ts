@@ -48,3 +48,12 @@ export const apiForecast = () => get('/merchant/forecast');
 export const apiReviews = () => get('/review/my');
 export const apiMerchantReviews = (merchantId: number) => get(`/review/merchant/${merchantId}`);
 export const apiReplyReview = (reviewId: number, reply: string) => post(`/review/${reviewId}/reply`, null, { params: { reply } });
+
+/* ---------- 顾客会话 / 售后工单 ---------- */
+export const apiImSessions = () => get('/merchant/im/sessions');
+export const apiImMessages = (sessionId: number, sinceId?: number) =>
+  get(`/merchant/im/session/${sessionId}/messages`, sinceId ? { sinceId } : {});
+export const apiImSend = (sessionId: number, data: any) => post(`/merchant/im/session/${sessionId}/send`, data);
+export const apiImTickets = (status?: string) => get('/merchant/im/tickets', status ? { status } : {});
+export const apiImHandleTicket = (id: number, action: string, reply: string) =>
+  post(`/merchant/im/ticket/${id}/handle`, { action, reply });

@@ -24,3 +24,22 @@ export const apiAuditCampaign = (id: number, pass: boolean) => put(`/admin/bid-c
 
 export const apiConfigs = () => get('/admin/config');
 export const apiUpdateConfig = (key: string, configValue: string) => put(`/admin/config/${key}`, { configValue });
+
+// ---- 收入结算 ----
+export const apiIncomeOverview = () => get('/admin/income/overview');
+export const apiIncomeMerchants = (page = 1, size = 10) => get('/admin/income/merchants', { page, size });
+
+// ---- AI 模型池 ----
+export const apiAiModels = () => get('/admin/ai-models');
+export const apiSaveAiModel = (data: any) => post('/admin/ai-models', data);
+export const apiDeleteAiModel = (id: number) => del(`/admin/ai-models/${id}`);
+export const apiToggleAiModel = (id: number, enabled: number) =>
+  put(`/admin/ai-models/${id}/enabled`, null, { params: { enabled } });
+export const apiMoveAiModel = (id: number, direction: string) =>
+  post(`/admin/ai-models/${id}/move`, null, { params: { direction } });
+export const apiTestAiModel = (data: any) => post('/admin/ai-models/test', data);
+export const apiTestAiModelById = (id: number) => post(`/admin/ai-models/${id}/test`);
+/** 拉取该服务商当前可用的模型名列表 */
+export const apiAiModelCatalog = (data: any) => post('/admin/ai-models/catalog', data);
+/** 模型池运行状态：当前生效模型、各模型最近结果与冷却剩余 */
+export const apiAiModelStatus = () => get('/admin/ai-models/status');

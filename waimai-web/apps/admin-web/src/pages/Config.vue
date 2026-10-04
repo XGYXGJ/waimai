@@ -8,7 +8,11 @@
         </div>
       </template>
       <el-alert type="info" :closable="false" style="margin-bottom: 16px"
-        title="此处配置 AI 大模型 API Key、高德地图 Key、推荐算法权重等核心参数，保存后即时生效，无需重启。" />
+        title="此处配置高德地图 Key、推荐算法权重等核心参数，保存后即时生效，无需重启。" />
+      <el-alert type="warning" :closable="false" style="margin-bottom: 16px"
+        title="AI 大模型相关配置（ai.llm.*）已迁移到「AI 模型」页面，支持多模型录入、启停与优先级降级；此处对它们已不再生效。" />
+      <el-alert type="success" :closable="false" style="margin-bottom: 16px"
+        title="配送计价（delivery.*）与平台抽成（commission.*）：起步费 + 超里程费用共同决定配送费；抽成比例用于结算平台/商家/骑手收入。改完即时生效，历史订单按当时快照结算不受影响。" />
 
       <el-table :data="configs">
         <el-table-column prop="configKey" label="配置项" width="220" />

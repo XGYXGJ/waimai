@@ -3,6 +3,7 @@ package com.waimai.config;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
@@ -24,7 +25,12 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Bean
     public RestTemplate restTemplate() {
-        return new RestTemplate();
+        // new RestTemplate() 默认没有任何超时，AI 服务一旦卡住会把后端线程永久挂住。
+        // zen 免费模型单次可能十几秒、本地 Ollama 更久，所以读超时给足但要封顶。
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(5_000);
+        factory.setReadTimeout(120_000);
+        return new RestTemplate(factory);
     }
 
     @Override

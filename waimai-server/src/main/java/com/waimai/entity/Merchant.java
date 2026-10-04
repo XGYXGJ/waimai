@@ -40,6 +40,9 @@ public class Merchant {
 
     private BigDecimal deliveryFee;
 
+    /** 配送范围（km）；null = 使用平台默认（sys_config: delivery.radius_km） */
+    private BigDecimal deliveryRadiusKm;
+
     private BigDecimal packageFee;
 
     private BigDecimal rating;
