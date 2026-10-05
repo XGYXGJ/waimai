@@ -4,6 +4,7 @@ import com.waimai.common.annotation.RequireRole;
 import com.waimai.common.result.R;
 import com.waimai.dto.WebDTO;
 import com.waimai.service.AdminService;
+import com.waimai.service.OperationLogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,6 +17,7 @@ import java.util.Map;
 public class AdminController {
 
     private final AdminService adminService;
+    private final OperationLogService operationLogService;
 
     /* ---------- 商户 ---------- */
 
@@ -121,5 +123,15 @@ public class AdminController {
     public R<Map<String, Object>> incomeByMerchant(@RequestParam(defaultValue = "1") int page,
                                                    @RequestParam(defaultValue = "10") int size) {
         return R.ok(adminService.incomeByMerchant(page, size));
+    }
+
+    /* ---------- 操作日志 ---------- */
+
+    /** 管理端操作流水：审核/退款/封禁/删评的留痕（设计文档第 9 章） */
+    @GetMapping("/operation-logs")
+    public R<Map<String, Object>> operationLogs(@RequestParam(required = false) String action,
+                                                @RequestParam(defaultValue = "1") int page,
+                                                @RequestParam(defaultValue = "20") int size) {
+        return R.ok(operationLogService.page(action, page, size));
     }
 }

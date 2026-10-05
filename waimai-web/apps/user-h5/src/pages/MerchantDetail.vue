@@ -2,36 +2,49 @@
   <div class="merchant-detail">
     <van-nav-bar :title="merchant.shopName || '商家详情'" left-arrow @click-left="$router.back()" />
 
-    <div class="merchant-header" v-if="merchant.id">
-      <div class="mh-main">
-        <div class="mh-logo">{{ (merchant.shopName || '商')[0] }}</div>
-        <div class="mh-info">
-          <div class="mh-name">{{ merchant.shopName }}</div>
-          <div class="mh-meta">⭐ {{ merchant.rating || 4.5 }} · 月售{{ merchant.monthlySales || 0 }}</div>
-          <div class="mh-meta">{{ merchant.businessHours || '营业中' }}</div>
-          <div class="mh-meta">
-            起送 ¥{{ Number(merchant.minOrderAmount || 0).toFixed(2) }}
-            · 配送费起 ¥{{ Number(merchant.deliveryFee || 0).toFixed(2) }}
-            <template v-if="merchant.deliveryRadiusKm"> · 配送范围 {{ merchant.deliveryRadiusKm }}km</template>
+    <header class="shop" v-if="merchant.id">
+      <div class="shop-main">
+        <div class="shop-logo" aria-hidden="true">{{ (merchant.shopName || '商')[0] }}</div>
+        <div class="shop-info">
+          <h1 class="shop-name">{{ merchant.shopName }}</h1>
+          <div class="shop-rate">
+            <span class="shop-score">{{ merchant.rating || 4.5 }}</span>
+            <van-icon name="star" size="11" class="shop-star" />
+            <span class="dot">·</span>
+            <span>月售 {{ merchant.monthlySales || 0 }}</span>
+            <span class="dot">·</span>
+            <span>{{ merchant.businessHours || '营业中' }}</span>
+          </div>
+          <div class="shop-ship">
+            <span>起送 ¥{{ Number(merchant.minOrderAmount || 0).toFixed(2) }}</span>
+            <span class="dot">·</span>
+            <span>配送 ¥{{ Number(merchant.deliveryFee || 0).toFixed(2) }} 起</span>
+            <template v-if="merchant.deliveryRadiusKm">
+              <span class="dot">·</span>
+              <span>范围 {{ merchant.deliveryRadiusKm }} km</span>
+            </template>
           </div>
         </div>
       </div>
-      <div class="mh-notice" v-if="merchant.notice">📢 {{ merchant.notice }}</div>
-    </div>
+      <div class="shop-notice" v-if="merchant.notice">
+        <van-icon name="volume-o" size="14" class="notice-icon" />
+        <span>{{ merchant.notice }}</span>
+      </div>
+    </header>
 
     <!-- 菜品列表（按分类） -->
-    <div class="dish-list" v-for="cat in dishCategories" :key="cat.id">
-      <div class="cat-title">{{ cat.name }}</div>
-      <div class="dish-item" v-for="d in dishesByCategory(cat.id)" :key="d.id">
-        <div class="dish-img">{{ (d.name || '菜')[0] }}</div>
+    <section class="cat-block" v-for="cat in dishCategories" :key="cat.id">
+      <h2 class="cat-title">{{ cat.name }}</h2>
+      <article class="dish" v-for="d in dishesByCategory(cat.id)" :key="d.id">
+        <div class="dish-img" aria-hidden="true">{{ (d.name || '菜')[0] }}</div>
         <div class="dish-body">
-          <div class="dish-name">{{ d.name }}</div>
-          <div class="dish-desc">{{ d.description }}</div>
+          <h3 class="dish-name">{{ d.name }}</h3>
+          <p class="dish-desc">{{ d.description }}</p>
           <div class="dish-foot">
             <div class="dish-price-wrap">
-              <span class="price">¥{{ d.price }}</span>
+              <span class="price">{{ d.price }}</span>
               <span v-if="d.originalPrice > d.price" class="origin-price">¥{{ d.originalPrice }}</span>
-              <van-tag v-if="d.originalPrice > d.price" type="danger" plain size="mini">{{ discountLabel(d) }}</van-tag>
+              <span v-if="d.originalPrice > d.price" class="discount-tag">{{ discountLabel(d) }}</span>
             </div>
             <van-stepper
               :model-value="cartQty(d.id)"
@@ -42,30 +55,34 @@
             />
           </div>
         </div>
-      </div>
-    </div>
+      </article>
+    </section>
 
     <!-- 购物车里是别家的菜：给出明确入口，不静默丢弃 -->
     <div class="other-shop-tip" v-if="otherShopCart">
       <span>购物车中还有「{{ otherShopCart.merchantName || '其他商家' }}」的 {{ otherShopCart.count }} 件商品</span>
-      <van-button size="mini" type="primary" color="#ff6034" @click="clearOtherShop">清空并换店</van-button>
+      <van-button size="small" type="primary" @click="clearOtherShop">清空并换店</van-button>
     </div>
 
     <!-- 用户评价 -->
-    <div class="review-section" v-if="reviews.records?.length">
-      <div class="review-header">
-        <span class="review-title">用户评价</span>
-        <span class="review-score">⭐ {{ reviews.avgRating || 0 }} <span class="review-sub">({{ reviews.total || 0 }}条 · 好评率{{ reviews.goodRate || 0 }}%)</span></span>
+    <section class="reviews" v-if="reviews.records?.length">
+      <div class="reviews-head">
+        <h2 class="reviews-title">用户评价</h2>
+        <span class="reviews-score">
+          {{ reviews.avgRating || 0 }}
+          <van-icon name="star" size="11" />
+          <span class="reviews-sub">({{ reviews.total || 0 }}条 · 好评率{{ reviews.goodRate || 0 }}%)</span>
+        </span>
       </div>
-      <div class="review-item" v-for="r in reviews.records" :key="r.id">
+      <article class="review" v-for="r in reviews.records" :key="r.id">
         <div class="review-top">
-          <van-rate :model-value="r.rating" readonly :size="12" color="#ff6034" />
+          <van-rate :model-value="r.rating" readonly :size="12" />
           <span class="review-time">{{ (r.createdAt || '').slice(0, 10) }}</span>
         </div>
-        <div class="review-content">{{ r.content }}</div>
-        <div class="review-reply" v-if="r.reply">商家回复：{{ r.reply }}</div>
-      </div>
-    </div>
+        <p class="review-content">{{ r.content }}</p>
+        <p class="review-reply" v-if="r.reply">商家回复：{{ r.reply }}</p>
+      </article>
+    </section>
 
     <!-- 购物车栏 -->
     <div class="cart-bar" v-if="totalQty > 0">
@@ -76,7 +93,6 @@
       </div>
       <van-button
         type="primary"
-        color="#ff6034"
         round
         :disabled="gapToMin > 0"
         @click="goCart"
@@ -273,189 +289,314 @@ onMounted(load);
 
 <style scoped>
 .merchant-detail {
-  padding-bottom: 70px;
+  min-height: 100vh;
+  background: var(--wm-bg-page);
+  padding-bottom: calc(84px + env(safe-area-inset-bottom));
 }
-.merchant-header {
-  background: #fff;
-  padding: 16px;
+
+/* ---------------- 店铺头部 ---------------- */
+.shop {
+  margin: var(--wm-space-3);
+  padding: var(--wm-space-4);
+  background: var(--wm-bg-card);
+  border-radius: var(--wm-radius-lg);
+  box-shadow: var(--wm-shadow-1);
 }
-.mh-main {
+
+.shop-main {
   display: flex;
-  gap: 12px;
+  gap: var(--wm-space-3);
 }
-.mh-logo {
+
+.shop-logo {
+  flex: 0 0 60px;
   width: 60px;
   height: 60px;
-  border-radius: 10px;
-  background: #ff6034;
+  display: grid;
+  place-items: center;
+  border-radius: var(--wm-radius-md);
+  background: linear-gradient(150deg, var(--wm-primary-light), var(--wm-primary));
   color: #fff;
+  font-size: var(--wm-font-2xl);
+  font-weight: 600;
+  box-shadow: var(--wm-shadow-1);
+}
+
+.shop-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.shop-name {
+  font-size: var(--wm-font-xl);
+  font-weight: 600;
+  line-height: var(--wm-leading-tight);
+  color: var(--wm-text-1);
+}
+
+.shop-rate,
+.shop-ship {
   display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: 26px;
-  font-weight: bold;
+  flex-wrap: wrap;
+  gap: var(--wm-space-1);
+  margin-top: var(--wm-space-2);
+  font-size: var(--wm-font-sm);
+  color: var(--wm-text-3);
 }
-.mh-name {
-  font-size: 18px;
+
+.shop-ship {
+  margin-top: var(--wm-space-1);
+}
+
+.shop-score,
+.shop-star {
+  color: var(--wm-primary);
   font-weight: 600;
 }
-.mh-meta {
-  font-size: 12px;
-  color: #999;
-  margin-top: 4px;
+
+.dot {
+  color: var(--wm-text-4);
 }
-.mh-notice {
-  margin-top: 12px;
-  padding: 8px 12px;
-  background: #fff7f3;
-  border-radius: 8px;
-  font-size: 13px;
-  color: #ff6034;
-}
-.cat-title {
-  padding: 12px 16px 4px;
-  font-weight: 600;
-  font-size: 15px;
-}
-.dish-item {
+
+.shop-notice {
   display: flex;
-  gap: 12px;
-  padding: 12px 16px;
-  background: #fff;
+  align-items: flex-start;
+  gap: var(--wm-space-2);
+  margin-top: var(--wm-space-3);
+  padding: var(--wm-space-2) var(--wm-space-3);
+  border-radius: var(--wm-radius-md);
+  background: var(--wm-primary-50);
+  color: var(--wm-primary-dark);
+  font-size: var(--wm-font-sm);
+  line-height: var(--wm-leading-normal);
 }
+
+.notice-icon {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+/* ---------------- 菜品 ---------------- */
+.cat-block {
+  margin: var(--wm-space-3);
+  padding: var(--wm-space-2) var(--wm-space-4) var(--wm-space-4);
+  background: var(--wm-bg-card);
+  border-radius: var(--wm-radius-lg);
+  box-shadow: var(--wm-shadow-1);
+}
+
+.cat-title {
+  padding: var(--wm-space-3) 0 var(--wm-space-2);
+  font-size: var(--wm-font-md);
+  font-weight: 600;
+  color: var(--wm-text-1);
+}
+
+.dish {
+  display: flex;
+  gap: var(--wm-space-3);
+  padding: var(--wm-space-3) 0;
+  border-top: 1px solid var(--wm-border);
+}
+
+.dish:first-of-type {
+  border-top: 0;
+}
+
 .dish-img {
+  flex: 0 0 64px;
   width: 64px;
   height: 64px;
-  border-radius: 8px;
-  background: #f0f0f0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  color: #ff6034;
+  display: grid;
+  place-items: center;
+  border-radius: var(--wm-radius-md);
+  background: var(--wm-primary-50);
+  color: var(--wm-primary);
+  font-size: var(--wm-font-2xl);
 }
+
 .dish-body {
   flex: 1;
+  min-width: 0;
 }
+
 .dish-name {
+  font-size: var(--wm-font-md);
   font-weight: 600;
+  color: var(--wm-text-1);
 }
+
 .dish-desc {
-  font-size: 12px;
-  color: #999;
-  margin: 4px 0;
+  margin: var(--wm-space-1) 0 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: var(--wm-font-sm);
+  color: var(--wm-text-3);
 }
+
 .dish-foot {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-top: 8px;
+  justify-content: space-between;
+  gap: var(--wm-space-2);
+  margin-top: var(--wm-space-2);
 }
+
 .dish-price-wrap {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--wm-space-2);
+  min-width: 0;
 }
+
+.dish-price-wrap .price {
+  font-size: var(--wm-font-lg);
+}
+
 .origin-price {
-  font-size: 12px;
-  color: #999;
+  font-size: var(--wm-font-sm);
+  color: var(--wm-text-4);
   text-decoration: line-through;
 }
-.review-section {
-  background: #fff;
-  margin-top: 12px;
-  padding: 12px 16px;
+
+.discount-tag {
+  padding: 1px var(--wm-space-2);
+  border: 1px solid var(--wm-primary-200);
+  border-radius: var(--wm-radius-sm);
+  color: var(--wm-primary);
+  font-size: var(--wm-font-xs);
+  line-height: 16px;
 }
-.review-header {
+
+/* ---------------- 其他商家的购物车提示 ---------------- */
+.other-shop-tip {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  justify-content: space-between;
+  gap: var(--wm-space-2);
+  margin: var(--wm-space-3);
+  padding: var(--wm-space-3);
+  border-radius: var(--wm-radius-md);
+  background: var(--wm-primary-50);
+  color: var(--wm-primary-dark);
+  font-size: var(--wm-font-sm);
 }
-.review-title {
+
+/* ---------------- 评价 ---------------- */
+.reviews {
+  margin: var(--wm-space-3);
+  padding: var(--wm-space-4);
+  background: var(--wm-bg-card);
+  border-radius: var(--wm-radius-lg);
+  box-shadow: var(--wm-shadow-1);
+}
+
+.reviews-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--wm-space-2);
+  margin-bottom: var(--wm-space-3);
+}
+
+.reviews-title {
+  font-size: var(--wm-font-lg);
   font-weight: 600;
-  font-size: 15px;
+  color: var(--wm-text-1);
 }
-.review-score {
-  color: #ff6034;
+
+.reviews-score {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wm-space-1);
+  color: var(--wm-primary);
   font-weight: 600;
 }
-.review-sub {
-  font-size: 12px;
-  color: #999;
+
+.reviews-sub {
+  font-size: var(--wm-font-sm);
+  color: var(--wm-text-3);
   font-weight: normal;
 }
-.review-item {
-  padding: 10px 0;
-  border-bottom: 1px solid #f0f0f0;
+
+.review {
+  padding: var(--wm-space-3) 0;
+  border-bottom: 1px solid var(--wm-border);
 }
-.review-item:last-child {
-  border-bottom: none;
+
+.review:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
 }
+
 .review-top {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
 }
+
 .review-time {
-  font-size: 12px;
-  color: #999;
+  font-size: var(--wm-font-sm);
+  color: var(--wm-text-3);
 }
+
 .review-content {
-  font-size: 14px;
-  color: #333;
-  margin-top: 6px;
+  margin-top: var(--wm-space-2);
+  font-size: var(--wm-font-md);
+  line-height: var(--wm-leading-normal);
+  color: var(--wm-text-2);
 }
+
 .review-reply {
-  font-size: 12px;
-  color: #ff6034;
-  margin-top: 6px;
-  padding: 6px 8px;
-  background: #fff7f3;
-  border-radius: 6px;
+  margin-top: var(--wm-space-2);
+  padding: var(--wm-space-2) var(--wm-space-3);
+  border-radius: var(--wm-radius-sm);
+  background: var(--wm-primary-50);
+  color: var(--wm-primary-dark);
+  font-size: var(--wm-font-sm);
+  line-height: var(--wm-leading-normal);
 }
-.other-shop-tip {
-  margin: 12px 16px;
-  padding: 10px 12px;
-  background: #fff7f3;
-  border-radius: 8px;
-  font-size: 13px;
-  color: #ff6034;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
+
+/* ---------------- 底部购物车栏 ---------------- */
 .cart-bar {
   position: fixed;
-  bottom: 0;
   left: 0;
   right: 0;
-  background: #333;
-  color: #fff;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 16px;
-  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  bottom: 0;
   z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--wm-space-3) var(--wm-space-4);
+  padding-bottom: calc(var(--wm-space-3) + env(safe-area-inset-bottom));
+  background: var(--wm-text-1);
+  color: #fff;
+  box-shadow: 0 -4px 16px rgba(24, 24, 32, 0.16);
 }
-.cart-gap {
-  color: #ffb27a;
-  font-size: 12px;
-  margin-left: 8px;
+
+.cart-info {
+  display: flex;
+  align-items: baseline;
+  gap: var(--wm-space-2);
+  min-width: 0;
 }
+
 .cart-total {
-  color: #ff6034;
-  font-size: 18px;
+  color: var(--wm-primary-light);
+  font-size: var(--wm-font-xl);
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
+
 .cart-count {
-  color: #999;
-  font-size: 12px;
-  margin-left: 8px;
+  font-size: var(--wm-font-sm);
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.cart-gap {
+  font-size: var(--wm-font-sm);
+  color: var(--wm-warning);
 }
 </style>

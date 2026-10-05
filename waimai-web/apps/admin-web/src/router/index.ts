@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
-import { getToken, isTokenExpired, clearAuth } from '@waimai/shared';
+import { hasValidSession, clearAuth } from '@waimai/shared';
 
 const routes = [
   { path: '/login', component: () => import('@/pages/Login.vue') },
@@ -19,8 +19,7 @@ const router = createRouter({ history: createWebHistory(), routes });
 
 router.beforeEach((to) => {
   if (to.path === '/login') return true;
-  const token = getToken();
-  if (!token || isTokenExpired(token)) {
+  if (!hasValidSession()) {
     clearAuth();
     return { path: '/login' };
   }

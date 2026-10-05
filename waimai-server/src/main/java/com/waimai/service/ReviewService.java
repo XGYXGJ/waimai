@@ -3,6 +3,7 @@ package com.waimai.service;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.waimai.common.exception.BizException;
 import com.waimai.common.result.ResultCode;
+import com.waimai.common.util.SensitiveWordUtil;
 import com.waimai.dto.WebDTO;
 import com.waimai.entity.Orders;
 import com.waimai.entity.Review;
@@ -43,7 +44,8 @@ public class ReviewService {
         r.setUserId(userId);
         r.setMerchantId(o.getMerchantId());
         r.setRating(req.getRating() == null ? 5 : req.getRating());
-        r.setContent(req.getContent());
+        // UGC 入库前过 DFA 敏感词表（设计文档第 9 章）：违规词替换为 * 后再落库
+        r.setContent(SensitiveWordUtil.filter(req.getContent()));
         r.setImages(req.getImages());
         reviewMapper.insert(r);
 

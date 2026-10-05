@@ -17,6 +17,8 @@ public class WebDTO {
     public static class LoginReq {
         private String phone;
         private String password;
+        /** true = 「30 天免登录」（签发长期 refresh token）；不传 / false = 默认短期 */
+        private Boolean remember;
     }
 
     @Data

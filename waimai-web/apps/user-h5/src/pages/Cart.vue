@@ -11,40 +11,56 @@
 
     <!-- 空购物车 -->
     <van-empty v-else-if="!items.length" description="购物车是空的">
-      <van-button round type="primary" color="#ff6034" @click="$router.back()">回去逛逛</van-button>
+      <van-button round type="primary" color="var(--wm-primary)" @click="$router.back()">回去逛逛</van-button>
     </van-empty>
 
     <template v-else>
       <!-- 店铺 -->
-      <van-cell-group inset style="margin-top: 12px">
-        <van-cell :title="merchantName || '商家'" icon="shop-o" :label="shopStatusLabel" />
-      </van-cell-group>
+      <section class="card">
+        <div class="row">
+          <van-icon name="shop-o" size="18" class="row-icon" />
+          <div class="row-main">
+            <h2 class="shop-name">{{ merchantName || '商家' }}</h2>
+            <p class="shop-status" v-if="shopStatusLabel">{{ shopStatusLabel }}</p>
+          </div>
+        </div>
+      </section>
 
       <!-- 收货地址 -->
-      <van-cell-group inset style="margin-top: 12px">
-        <van-cell v-if="selectedAddress" :title="selectedAddress.detail" :label="`${selectedAddress.contact} ${selectedAddress.phone}`" is-link @click="showAddress = true">
-          <template #right-icon>
-            <van-tag v-if="!hasCoords(selectedAddress)" type="warning" size="mini">未设位置</van-tag>
-          </template>
-        </van-cell>
-        <van-cell v-else title="请填写收货地址" is-link @click="openAddressPicker" />
-      </van-cell-group>
+      <section class="card card--tap" v-if="selectedAddress" @click="showAddress = true">
+        <div class="row">
+          <van-icon name="location-o" size="18" class="row-icon" />
+          <div class="row-main">
+            <div class="addr-detail">{{ selectedAddress.detail }}</div>
+            <div class="addr-contact">{{ selectedAddress.contact }} {{ selectedAddress.phone }}</div>
+          </div>
+          <van-tag v-if="!hasCoords(selectedAddress)" type="warning" size="mini">未设位置</van-tag>
+          <van-icon name="arrow" size="12" class="row-arrow" />
+        </div>
+      </section>
+      <section class="card card--tap" v-else @click="openAddressPicker">
+        <div class="row">
+          <van-icon name="location-o" size="18" class="row-icon" />
+          <span class="row-main addr-empty">请填写收货地址</span>
+          <van-icon name="arrow" size="12" class="row-arrow" />
+        </div>
+      </section>
 
       <!-- 超出配送范围：下单前就拦住，别等提交才报错 -->
       <van-notice-bar
         v-if="selectedAddress && !inRange"
+        class="range-notice"
         wrapable
         :scrollable="false"
         left-icon="warning-o"
-        color="#ed6a0c"
-        background="#fffbe8"
+        color="var(--wm-text-1)"
+        background="var(--wm-primary-50)"
         :text="rangeTip || '收货地址超出商家配送范围'"
-        style="margin-top: 12px"
       />
 
-      <!-- 商品 -->
-      <van-cell-group inset style="margin-top: 12px">
-        <div class="items-title">商品清单</div>
+      <!-- 商品清单 -->
+      <section class="card">
+        <h2 class="card-title">商品清单</h2>
         <div class="cart-item" v-for="item in items" :key="item.dishId">
           <div class="ci-main">
             <div class="ci-name">
@@ -52,7 +68,10 @@
               <van-tag v-if="item.dishStatus !== undefined && item.dishStatus !== 1" type="danger" size="mini">已下架</van-tag>
               <van-tag v-else-if="isStockShort(item)" type="warning" size="mini">库存不足</van-tag>
             </div>
-            <div class="ci-price">¥{{ money(item.price) }}<span class="ci-unit"> x {{ qtyOf(item) }}</span></div>
+            <div class="ci-price">
+              <span class="price">{{ money(item.price) }}</span>
+              <span class="ci-unit"> x {{ qtyOf(item) }}</span>
+            </div>
           </div>
           <van-stepper
             :model-value="qtyOf(item)"
@@ -63,42 +82,59 @@
           />
           <span class="ci-subtotal">¥{{ money(Number(item.price) * qtyOf(item)) }}</span>
         </div>
-        <van-cell title="配送费" :value="`¥${money(deliveryFee)}`">
-          <template #label>
-            <span v-if="distanceKm !== null">配送距离约 {{ Number(distanceKm).toFixed(1) }} km（超出 {{ Number(radiusKm).toFixed(1) }} km 不配送）</span>
-          </template>
-        </van-cell>
-        <van-cell title="打包费" :value="`¥${money(packageFee)}`" />
-      </van-cell-group>
+
+        <div class="fee-row">
+          <div class="fee-main">
+            <span class="fee-label">配送费</span>
+            <span class="fee-sub" v-if="distanceKm !== null">
+              配送距离约 {{ Number(distanceKm).toFixed(1) }} km（超出 {{ Number(radiusKm).toFixed(1) }} km 不配送）
+            </span>
+          </div>
+          <span class="fee-value">¥{{ money(deliveryFee) }}</span>
+        </div>
+        <div class="fee-row">
+          <span class="fee-label">打包费</span>
+          <span class="fee-value">¥{{ money(packageFee) }}</span>
+        </div>
+      </section>
 
       <!-- 优惠券 -->
-      <van-cell-group inset style="margin-top: 12px">
-        <van-cell
-          title="优惠券"
-          :value="couponValueText"
-          is-link
-          @click="showCoupons = true"
-        />
-        <van-cell v-if="minOrderAmount > 0" title="起送价" :value="`¥${money(minOrderAmount)}`" />
-        <van-cell
-          v-if="gapToMin > 0"
-          title="还差"
-          :value="`¥${money(gapToMin)} 起送`"
-          value-class="warn-text"
-        />
-      </van-cell-group>
+      <section class="card">
+        <div class="row row--tap" @click="showCoupons = true">
+          <span class="row-label">优惠券</span>
+          <span class="row-value" :class="{ 'row-value--coupon': discount > 0 }">{{ couponValueText }}</span>
+          <van-icon name="arrow" size="12" class="row-arrow" />
+        </div>
+        <div class="row row--static" v-if="minOrderAmount > 0">
+          <span class="row-label">起送价</span>
+          <span class="row-value">¥{{ money(minOrderAmount) }}</span>
+        </div>
+        <div class="row row--static" v-if="gapToMin > 0">
+          <span class="row-label">还差</span>
+          <span class="row-value row-value--warn">¥{{ money(gapToMin) }} 起送</span>
+        </div>
+      </section>
 
       <!-- 备注 -->
-      <van-field v-model="remark" label="备注" placeholder="口味、偏好等" maxlength="100" show-word-limit style="margin-top: 12px" />
+      <section class="card card--flat">
+        <van-field
+          v-model="remark"
+          label="备注"
+          placeholder="口味、偏好等"
+          maxlength="100"
+          show-word-limit
+          class="remark-field"
+        />
+      </section>
 
       <!-- 提交 -->
       <div class="submit-bar">
         <div class="total">
-          合计：<span class="price">¥{{ money(totalAmount) }}</span>
+          合计：<span class="price total-price">{{ money(totalAmount) }}</span>
         </div>
         <van-button
           type="primary"
-          color="#ff6034"
+          color="var(--wm-primary)"
           round
           :loading="submitting"
           :disabled="!canSubmit"
@@ -119,13 +155,13 @@
           @click="chooseAddress(a)"
         >
           <template #right-icon>
-            <van-icon v-if="selectedAddress?.id === a.id" name="success" color="#ff6034" />
-            <van-icon name="edit" color="#969799" style="margin-left: 12px" @click.stop="editAddress(a)" />
+            <van-icon v-if="selectedAddress?.id === a.id" name="success" color="var(--wm-primary)" />
+            <van-icon name="edit" color="var(--wm-text-3)" class="addr-edit" @click.stop="editAddress(a)" />
           </template>
         </van-cell>
         <van-empty v-if="!addresses.length" description="暂无地址，请新增" />
         <div class="popup-actions">
-          <van-button round block type="primary" color="#ff6034" icon="plus" @click="addAddress">新增收货地址</van-button>
+          <van-button round block type="primary" color="var(--wm-primary)" icon="plus" @click="addAddress">新增收货地址</van-button>
         </div>
       </div>
     </van-popup>
@@ -143,7 +179,7 @@
       <div class="popup-title">选择优惠券</div>
       <van-cell title="不使用优惠券" clickable @click="clearCoupon">
         <template #right-icon>
-          <van-icon v-if="!selectedCoupon" name="success" color="#ff6034" />
+          <van-icon v-if="!selectedCoupon" name="success" color="var(--wm-primary)" />
         </template>
       </van-cell>
       <van-cell
@@ -155,11 +191,11 @@
         @click="selectCoupon(c)"
       >
         <template #right-icon>
-          <van-icon v-if="selectedCoupon?.couponId === c.couponId" name="success" color="#ff6034" />
+          <van-icon v-if="selectedCoupon?.couponId === c.couponId" name="success" color="var(--wm-primary)" />
         </template>
       </van-cell>
       <van-empty v-if="!usableCoupons.length" description="暂无满足条件的优惠券">
-        <van-button round plain type="primary" color="#ff6034" @click="goCouponHall">
+        <van-button round plain type="primary" color="var(--wm-primary)" @click="goCouponHall">
           去领券中心看看
         </van-button>
       </van-empty>
@@ -560,7 +596,7 @@ async function confirmClear() {
       title: '清空购物车',
       message: '确定要清空购物车吗？清空后需要重新选购。',
       confirmButtonText: '清空',
-      confirmButtonColor: '#ee0a24',
+      confirmButtonColor: 'var(--wm-danger)',
     });
   } catch {
     return; // 用户点了取消
@@ -638,86 +674,298 @@ onMounted(load);
 </script>
 
 <style scoped>
+/* 页面外层：底部按「固定提交栏高度 + 安全区」留白，避免内容被遮挡 */
 .cart-page {
-  padding-bottom: 90px;
   min-height: 100vh;
-  background: #f5f5f5;
+  background: var(--wm-bg-page);
+  padding-bottom: calc(var(--wm-tap-min) + var(--wm-space-8) + var(--wm-space-3) + env(safe-area-inset-bottom));
 }
+
 .page-loading {
-  padding: 60px 0;
+  padding: var(--wm-space-8) 0;
 }
+
 .nav-clear {
-  color: #969799;
-  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--wm-tap-min);
+  color: var(--wm-text-3);
+  font-size: var(--wm-font-md);
   cursor: pointer;
 }
-.items-title {
-  padding: 12px 16px 4px;
-  font-weight: 600;
-  color: #333;
+
+/* ---------------- 通用卡片与行 ---------------- */
+.card {
+  margin: var(--wm-space-3);
+  padding: var(--wm-space-4);
+  background: var(--wm-bg-card);
+  border-radius: var(--wm-radius-lg);
+  box-shadow: var(--wm-shadow-1);
 }
+
+.card--tap {
+  cursor: pointer;
+}
+
+.card--tap:active {
+  box-shadow: var(--wm-shadow-2);
+}
+
+/* 备注卡片：内边距交给 van-field 自己，避免双层留白 */
+.card--flat {
+  padding: 0;
+}
+
+.card-title {
+  margin-bottom: var(--wm-space-2);
+  font-size: var(--wm-font-lg);
+  font-weight: 600;
+  line-height: var(--wm-leading-tight);
+  color: var(--wm-text-1);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--wm-space-2);
+  min-height: var(--wm-tap-min);
+}
+
+.row--tap {
+  cursor: pointer;
+}
+
+.row--tap:active {
+  background: var(--wm-primary-50);
+  border-radius: var(--wm-radius-sm);
+}
+
+.row--static {
+  border-top: 1px solid var(--wm-border);
+}
+
+.row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.row-icon {
+  flex-shrink: 0;
+  color: var(--wm-primary);
+}
+
+.row-arrow {
+  flex-shrink: 0;
+  color: var(--wm-text-4);
+}
+
+.row-label {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--wm-font-md);
+  color: var(--wm-text-2);
+}
+
+.row-value {
+  flex-shrink: 0;
+  font-size: var(--wm-font-md);
+  color: var(--wm-text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.row-value--coupon,
+.row-value--warn {
+  color: var(--wm-primary);
+  font-weight: 600;
+}
+
+/* ---------------- 店铺 / 地址 ---------------- */
+.shop-name {
+  font-size: var(--wm-font-lg);
+  font-weight: 600;
+  line-height: var(--wm-leading-tight);
+  color: var(--wm-text-1);
+}
+
+.shop-status {
+  margin-top: var(--wm-space-1);
+  font-size: var(--wm-font-sm);
+  color: var(--wm-text-3);
+}
+
+.addr-detail {
+  font-size: var(--wm-font-md);
+  font-weight: 600;
+  line-height: var(--wm-leading-normal);
+  color: var(--wm-text-1);
+}
+
+.addr-contact {
+  margin-top: var(--wm-space-1);
+  font-size: var(--wm-font-sm);
+  color: var(--wm-text-3);
+}
+
+.addr-empty {
+  font-size: var(--wm-font-md);
+  color: var(--wm-text-3);
+}
+
+/* 超出配送范围提示（背景/文字均取自 token） */
+.range-notice {
+  margin: var(--wm-space-3);
+  border-radius: var(--wm-radius-md);
+}
+
+/* ---------------- 商品清单 ---------------- */
 .cart-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  font-size: 14px;
+  gap: var(--wm-space-2);
+  min-height: var(--wm-tap-min);
+  padding: var(--wm-space-3) 0;
+  font-size: var(--wm-font-md);
 }
+
+.cart-item + .cart-item {
+  border-top: 1px solid var(--wm-border);
+}
+
 .ci-main {
   flex: 1;
   min-width: 0;
 }
+
 .ci-name {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--wm-space-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--wm-text-1);
 }
+
 .ci-price {
-  color: #ff6034;
-  font-size: 13px;
-  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: var(--wm-space-1);
+  margin-top: var(--wm-space-1);
+  font-size: var(--wm-font-sm);
 }
+
 .ci-unit {
-  color: #999;
+  color: var(--wm-text-3);
 }
+
 .ci-subtotal {
-  min-width: 56px;
+  flex-shrink: 0;
+  min-width: calc(var(--wm-space-8) + var(--wm-space-6));
   text-align: right;
-  color: #333;
-}
-/* value-class 作用在 van-cell 内部的 value 元素上，必须用 :deep 才能命中（scoped 只到子组件根节点） */
-:deep(.warn-text) {
-  color: #ff6034 !important;
+  color: var(--wm-text-1);
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
+
+.fee-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--wm-space-3);
+  min-height: var(--wm-tap-min);
+  padding-top: var(--wm-space-3);
+  border-top: 1px solid var(--wm-border);
+}
+
+.fee-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wm-space-1);
+  min-width: 0;
+}
+
+.fee-label {
+  font-size: var(--wm-font-md);
+  color: var(--wm-text-2);
+}
+
+.fee-sub {
+  font-size: var(--wm-font-xs);
+  line-height: var(--wm-leading-normal);
+  color: var(--wm-text-4);
+}
+
+.fee-value {
+  flex-shrink: 0;
+  font-size: var(--wm-font-md);
+  color: var(--wm-text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------- 备注 ---------------- */
+.remark-field {
+  padding: var(--wm-space-3) var(--wm-space-4);
+  background: transparent;
+}
+
+/* ---------------- 底部固定提交栏 ---------------- */
 .submit-bar {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  background: #fff;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 16px;
-  padding-bottom: calc(10px + env(safe-area-inset-bottom));
-  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05);
   z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--wm-space-3);
+  padding: var(--wm-space-3) var(--wm-space-4);
+  padding-bottom: calc(var(--wm-space-3) + env(safe-area-inset-bottom));
+  background: var(--wm-bg-card);
+  border-top: 1px solid var(--wm-border);
+  box-shadow: var(--wm-shadow-1);
 }
+
+.total {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--wm-font-md);
+  color: var(--wm-text-2);
+}
+
+.total-price {
+  font-size: var(--wm-font-xl);
+}
+
+/* ---------------- 弹层 ---------------- */
 .popup-title {
+  padding: var(--wm-space-4);
   text-align: center;
-  padding: 16px;
+  font-size: var(--wm-font-lg);
   font-weight: 600;
+  line-height: var(--wm-leading-tight);
+  color: var(--wm-text-1);
 }
+
 .popup-body {
   max-height: 70vh;
   overflow-y: auto;
-  padding-bottom: 24px;
+  padding-bottom: var(--wm-space-6);
 }
+
+/* 弹层内的可点行同样保证 44px 触控高度 */
+.popup-body :deep(.van-cell) {
+  align-items: center;
+  min-height: var(--wm-tap-min);
+  padding: var(--wm-space-3) var(--wm-space-4);
+}
+
 .popup-actions {
-  margin: 16px;
+  margin: var(--wm-space-4);
+}
+
+.addr-edit {
+  margin-left: var(--wm-space-3);
 }
 </style>

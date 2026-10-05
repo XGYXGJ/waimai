@@ -1,7 +1,12 @@
 <template>
   <div class="addr-editor">
     <van-form @submit="onSubmit">
-      <van-cell-group inset>
+      <!-- 联系人信息 -->
+      <section class="card">
+        <h2 class="block-title">
+          <van-icon name="user-o" size="14" />
+          <span>联系人信息</span>
+        </h2>
         <van-field
           v-model="form.contact"
           label="联系人"
@@ -28,36 +33,42 @@
           placeholder="小区/写字楼 + 楼栋门牌号，如：XX路8号XX小区3栋502"
           :rules="[{ required: true, message: '请填写详细地址（方便骑手送达）' }]"
         />
-      </van-cell-group>
+      </section>
 
-      <van-cell-group inset class="loc-group">
-        <div class="group-title">
-          <span>收货位置（用于骑手导航）</span>
-          <van-button size="mini" type="primary" plain color="#ff6034" icon="location-o" @click="useCurrent">
+      <!-- 收货位置（地图选点） -->
+      <section class="card">
+        <div class="block-head">
+          <h2 class="block-title">
+            <van-icon name="location-o" size="14" />
+            <span>收货位置</span>
+          </h2>
+          <van-button size="small" type="primary" plain color="var(--wm-primary)" icon="location-o" @click="useCurrent">
             使用当前定位
           </van-button>
         </div>
+        <p class="block-sub">用于骑手导航</p>
         <div ref="mapEl" class="map" v-show="amapReady"></div>
         <div class="map-tip" v-if="!amapReady">{{ mapTip }}</div>
         <van-field v-model="addrKeyword" label="地址搜索" placeholder="输入地址自动定位，如：XX市XX区XX路" clearable>
           <template #button>
-            <van-button size="small" type="primary" color="#ff6034" :loading="searching" @click="searchAddr">搜索</van-button>
+            <van-button size="small" type="primary" color="var(--wm-primary)" :loading="searching" @click="searchAddr">搜索</van-button>
           </template>
         </van-field>
         <van-field v-model="form.lng" label="经度" type="number" placeholder="点击地图选点，或手动填写" />
         <van-field v-model="form.lat" label="纬度" type="number" placeholder="点击地图选点，或手动填写" />
-      </van-cell-group>
+      </section>
 
-      <van-cell-group inset>
-        <van-cell title="设为默认地址" center>
-          <template #right-icon>
-            <van-switch v-model="isDefault" size="20" />
-          </template>
-        </van-cell>
-      </van-cell-group>
+      <!-- 默认地址 -->
+      <section class="card">
+        <div class="switch-row">
+          <span class="switch-label">设为默认地址</span>
+          <van-switch v-model="isDefault" size="20" />
+        </div>
+      </section>
 
+      <!-- 保存：#submit 粘在滚动区底部，始终可点，并避让安全区 -->
       <div class="submit">
-        <van-button round block type="primary" color="#ff6034" native-type="submit" :loading="saving">
+        <van-button round block type="primary" color="var(--wm-primary)" native-type="submit" :loading="saving">
           保存
         </van-button>
       </div>
@@ -196,31 +207,133 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.loc-group {
-  margin-top: 12px;
+/* ---------------- 通用卡片 ---------------- */
+.card {
+  margin: var(--wm-space-3);
+  padding: var(--wm-space-4);
+  background: var(--wm-bg-card);
+  border-radius: var(--wm-radius-lg);
+  box-shadow: var(--wm-shadow-1);
 }
-.group-title {
+
+/* ---------------- 区块标题 ---------------- */
+.block-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px 6px;
-  font-size: 13px;
-  color: #666;
+  flex-wrap: wrap;
+  gap: var(--wm-space-2);
 }
+
+.block-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wm-space-1);
+  font-size: var(--wm-font-lg);
+  font-weight: 600;
+  line-height: var(--wm-leading-tight);
+  color: var(--wm-text-1);
+}
+
+.block-sub {
+  margin-top: var(--wm-space-1);
+  font-size: var(--wm-font-sm);
+  color: var(--wm-text-4);
+}
+
+/* ---------------- 表单 ---------------- */
+/* 输入控件可点高度不低于 44px */
+.card :deep(.van-field) {
+  min-height: var(--wm-tap-min);
+  padding: var(--wm-space-3) 0;
+  background: transparent;
+}
+
+/* 标签用次要色，输入值用主文字色，层级清晰 */
+.card :deep(.van-field__label) {
+  color: var(--wm-text-3);
+  font-size: var(--wm-font-md);
+}
+
+.card :deep(.van-field__control) {
+  color: var(--wm-text-1);
+  font-size: var(--wm-font-md);
+}
+
+.card :deep(.van-field__control)::placeholder {
+  color: var(--wm-text-4);
+}
+
+/* 校验错误提示统一用语义危险色 */
+.card :deep(.van-field__error-message) {
+  color: var(--wm-danger);
+  font-size: var(--wm-font-sm);
+}
+
+.card :deep(.van-field::after) {
+  left: 0;
+  right: 0;
+  border-bottom-color: var(--wm-border);
+}
+
+.card :deep(.van-field:last-child::after) {
+  display: none;
+}
+
+/* 次级按钮同样满足 44px 触控下限 */
+.card :deep(.van-button--small) {
+  min-height: var(--wm-tap-min);
+  padding: 0 var(--wm-space-4);
+}
+
+/* ---------------- 地图 ---------------- */
 .map {
-  width: calc(100% - 24px);
+  width: 100%;
   height: 200px;
-  margin: 0 12px 8px;
-  border-radius: 8px;
+  margin: var(--wm-space-2) 0;
+  border-radius: var(--wm-radius-md);
   overflow: hidden;
-  background: #f2f2f2;
+  background: var(--wm-border);
 }
+
 .map-tip {
-  padding: 8px 16px;
-  font-size: 12px;
-  color: #999;
+  margin-top: var(--wm-space-2);
+  padding: var(--wm-space-3);
+  border-radius: var(--wm-radius-md);
+  background: var(--wm-bg-page);
+  font-size: var(--wm-font-sm);
+  color: var(--wm-text-3);
 }
+
+/* ---------------- 默认地址开关 ---------------- */
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--wm-space-3);
+  min-height: var(--wm-tap-min);
+}
+
+.switch-label {
+  font-size: var(--wm-font-md);
+  color: var(--wm-text-2);
+}
+
+/* ---------------- 保存 ---------------- */
 .submit {
-  margin: 16px;
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  margin-top: var(--wm-space-4);
+  padding: var(--wm-space-3) var(--wm-space-4);
+  padding-bottom: calc(var(--wm-space-3) + env(safe-area-inset-bottom));
+  background: var(--wm-bg-card);
+  border-top: 1px solid var(--wm-border);
+}
+
+.submit :deep(.van-button) {
+  min-height: var(--wm-tap-min);
+  font-size: var(--wm-font-lg);
+  font-weight: 600;
 }
 </style>

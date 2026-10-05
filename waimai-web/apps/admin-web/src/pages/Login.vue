@@ -9,6 +9,9 @@
         <el-form-item>
           <el-input v-model="password" placeholder="密码" type="password" @keyup.enter="login" />
         </el-form-item>
+        <el-form-item>
+          <el-checkbox v-model="remember" class="remember-row">30 天免登录</el-checkbox>
+        </el-form-item>
         <el-button type="primary" style="width: 100%" @click="login">登录</el-button>
       </el-form>
     </el-card>
@@ -25,10 +28,11 @@ import { apiLogin } from '@/api';
 const router = useRouter();
 const phone = ref('');
 const password = ref('');
+const remember = ref(false);
 
 async function login() {
   try {
-    const res = await apiLogin(phone.value, password.value);
+    const res = await apiLogin(phone.value, password.value, remember.value);
     setAuth(res.accessToken, res.refreshToken);
     ElMessage.success('登录成功');
     router.replace('/');
@@ -48,6 +52,11 @@ async function login() {
 }
 .login-card {
   width: 360px;
+}
+.remember-row {
+  height: 44px;
+  display: flex;
+  align-items: center;
 }
 h2 {
   text-align: center;

@@ -4,52 +4,80 @@
 
     <!-- 订单已经不能再支付（超时被系统取消 / 已支付 / 已退款） -->
     <div v-if="invalid" class="invalid-box">
-      <van-icon name="clock-o" size="56" color="#c8c9cc" />
+      <div class="invalid-icon">
+        <van-icon name="clock-o" size="34" />
+      </div>
       <div class="invalid-text">{{ invalidText }}</div>
-      <van-button round type="primary" color="#ff6034" style="margin-top: 16px" @click="goDetail">
+      <van-button round type="primary" color="var(--wm-primary)" class="invalid-btn" @click="goDetail">
         查看订单详情
       </van-button>
-      <van-button round plain style="margin-top: 8px" @click="goHome">回到首页</van-button>
+      <van-button round plain class="invalid-btn" @click="goHome">回到首页</van-button>
     </div>
 
     <div v-else class="pay-body">
-      <div class="amount">
-        <div class="label">支付金额</div>
-        <div class="value price">¥{{ money(amount) }}</div>
-      </div>
+      <!-- 支付金额 -->
+      <section class="card amount-card">
+        <div class="amount-label">支付金额</div>
+        <!-- .price 自带 ¥ 前缀与等宽数字，不再手写货币符号 -->
+        <div class="amount-value price">{{ money(amount) }}</div>
+      </section>
 
       <!-- 支付倒计时：与后端 MQ 延迟队列（15 分钟）同源，超时会自动取消 -->
-      <div class="countdown" :class="{ urgent: remain <= 60 }">
+      <section class="card countdown-card" :class="{ urgent: remain <= 60 }">
         <template v-if="remain > 0">
-          <van-icon name="clock-o" />
-          请在 <span class="cd-num">{{ mmss }}</span> 内完成支付，超时订单将自动取消
+          <van-icon name="clock-o" size="16" class="cd-icon" />
+          <span class="cd-text">
+            请在 <span class="cd-num">{{ mmss }}</span> 内完成支付，超时订单将自动取消
+          </span>
         </template>
-        <template v-else>支付时间已结束，正在确认订单状态…</template>
-      </div>
+        <template v-else>
+          <van-icon name="clock-o" size="16" class="cd-icon" />
+          <span class="cd-text">支付时间已结束，正在确认订单状态…</span>
+        </template>
+      </section>
 
       <!-- 费用明细 -->
-      <van-cell-group inset title="费用明细">
-        <div class="detail-item" v-for="item in order.items" :key="item.dishId">
-          <span>{{ item.dishName }} × {{ item.quantity }}</span>
-          <span>¥{{ money(item.price * item.quantity) }}</span>
+      <section class="card detail-card">
+        <h2 class="card-title">
+          <van-icon name="orders-o" size="16" class="title-icon" />
+          费用明细
+        </h2>
+        <div class="dish-list" v-if="order.items && order.items.length">
+          <div class="dish-row" v-for="item in order.items" :key="item.dishId">
+            <span class="dish-name">{{ item.dishName }} × {{ item.quantity }}</span>
+            <span class="dish-money">¥{{ money(item.price * item.quantity) }}</span>
+          </div>
         </div>
-        <van-cell title="商品小计" :value="`¥${money(order.dishAmount)}`" />
-        <van-cell title="配送费" :value="`¥${money(order.deliveryFee)}`" />
-        <van-cell title="打包费" :value="`¥${money(order.packageFee)}`" />
-        <van-cell v-if="order.discountAmount > 0" title="优惠券" :value="`-¥${money(order.discountAmount)}`" />
-      </van-cell-group>
+        <div class="fee-row">
+          <span class="fee-label">商品小计</span>
+          <span class="fee-value">¥{{ money(order.dishAmount) }}</span>
+        </div>
+        <div class="fee-row">
+          <span class="fee-label">配送费</span>
+          <span class="fee-value">¥{{ money(order.deliveryFee) }}</span>
+        </div>
+        <div class="fee-row">
+          <span class="fee-label">打包费</span>
+          <span class="fee-value">¥{{ money(order.packageFee) }}</span>
+        </div>
+        <div class="fee-row" v-if="order.discountAmount > 0">
+          <span class="fee-label">优惠券</span>
+          <span class="fee-value fee-cut">-¥{{ money(order.discountAmount) }}</span>
+        </div>
+      </section>
 
-      <div class="actions">
+      <!-- 操作区 -->
+      <section class="card actions-card">
         <van-button
-          round block type="primary" color="#ff6034"
+          round block type="primary" color="var(--wm-primary)" class="act-btn"
           :loading="paying" :disabled="expired || checking" @click="pay"
         >{{ expired ? '支付已超时' : '确认支付' }}</van-button>
         <van-button
-          round block plain style="margin-top: 8px"
+          round block plain class="act-btn act-btn--cancel"
           :loading="cancelling" :disabled="paying" @click="cancel"
         >取消订单</van-button>
-      </div>
-      <div class="tip">模拟支付，不产生真实扣款</div>
+        <div class="tip">模拟支付，不产生真实扣款</div>
+      </section>
     </div>
   </div>
 </template>
@@ -177,7 +205,7 @@ async function cancel() {
       title: '取消订单',
       message: '取消后已使用的优惠券会退回，确定取消这笔订单吗？',
       confirmButtonText: '取消订单',
-      confirmButtonColor: '#ee0a24',
+      confirmButtonColor: 'var(--wm-danger)',
       cancelButtonText: '再想想',
     });
   } catch {
@@ -236,69 +264,183 @@ onUnmounted(stopTimer);
 <style scoped>
 .pay-page {
   min-height: 100vh;
-  background: #f5f5f5;
+  background: var(--wm-bg-page);
+  padding-bottom: calc(var(--wm-space-6) + env(safe-area-inset-bottom));
 }
+
 .pay-body {
-  padding: 24px 0 40px;
+  padding-top: var(--wm-space-3);
 }
-.amount {
-  text-align: center;
-  margin: 24px 0 16px;
+
+/* ---------------- 卡片：与 Home / MerchantDetail 同一套壳 ---------------- */
+.card {
+  margin: var(--wm-space-3);
+  padding: var(--wm-space-4);
+  background: var(--wm-bg-card);
+  border-radius: var(--wm-radius-lg);
+  box-shadow: var(--wm-shadow-1);
 }
-.amount .label {
-  color: #999;
-  font-size: 14px;
-}
-.amount .value {
-  font-size: 40px;
-  font-weight: bold;
-  margin-top: 12px;
-}
-.countdown {
+
+.card-title {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 4px;
-  margin: 0 16px 16px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: #fff7f3;
-  color: #ff6034;
-  font-size: 13px;
-}
-.countdown.urgent {
-  background: #fff1f0;
-  color: #ee0a24;
+  gap: var(--wm-space-2);
+  margin-bottom: var(--wm-space-3);
+  font-size: var(--wm-font-lg);
   font-weight: 600;
+  line-height: var(--wm-leading-tight);
+  color: var(--wm-text-1);
 }
-.cd-num {
-  font-variant-numeric: tabular-nums;
+
+.title-icon {
+  color: var(--wm-primary);
+}
+
+/* ---------------- 支付金额 ---------------- */
+.amount-card {
+  text-align: center;
+}
+
+.amount-label {
+  font-size: var(--wm-font-sm);
+  color: var(--wm-text-3);
+}
+
+.amount-value {
+  margin-top: var(--wm-space-2);
+  font-size: var(--wm-font-2xl);
   font-weight: 700;
-  font-size: 15px;
+  line-height: var(--wm-leading-tight);
 }
-.tip {
-  text-align: center;
-  color: #999;
-  font-size: 12px;
-  margin-top: 16px;
-}
-.detail-item {
+
+/* ---------------- 倒计时 ---------------- */
+.countdown-card {
   display: flex;
+  align-items: center;
+  gap: var(--wm-space-2);
+  background: var(--wm-primary-50);
+  box-shadow: none;
+}
+
+.cd-icon {
+  flex-shrink: 0;
+  color: var(--wm-primary);
+}
+
+.cd-text {
+  font-size: var(--wm-font-sm);
+  line-height: var(--wm-leading-normal);
+  color: var(--wm-primary-dark);
+}
+
+.cd-num {
+  font-size: var(--wm-font-lg);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--wm-primary);
+}
+
+.countdown-card.urgent .cd-icon,
+.countdown-card.urgent .cd-num {
+  color: var(--wm-danger);
+}
+
+.countdown-card.urgent .cd-text {
+  color: var(--wm-danger);
+}
+
+/* ---------------- 费用明细 ---------------- */
+.dish-list {
+  padding-bottom: var(--wm-space-2);
+  margin-bottom: var(--wm-space-2);
+  border-bottom: 1px solid var(--wm-border);
+}
+
+.dish-row,
+.fee-row {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
-  padding: 8px 16px;
-  font-size: 14px;
-  color: #333;
+  gap: var(--wm-space-3);
+  min-height: var(--wm-tap-min);
+  font-size: var(--wm-font-md);
 }
-.actions {
-  margin: 20px 16px 0;
+
+.dish-name,
+.fee-label {
+  flex: 1;
+  min-width: 0;
+  color: var(--wm-text-2);
 }
+
+.dish-money,
+.fee-value {
+  flex-shrink: 0;
+  color: var(--wm-text-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.fee-cut {
+  color: var(--wm-primary);
+}
+
+/* ---------------- 操作区 ---------------- */
+.actions-card {
+  padding-bottom: var(--wm-space-3);
+}
+
+.act-btn {
+  min-height: var(--wm-tap-min);
+  font-size: var(--wm-font-lg);
+}
+
+.act-btn--cancel {
+  margin-top: var(--wm-space-3);
+  font-size: var(--wm-font-md);
+  color: var(--wm-text-2);
+}
+
+.tip {
+  margin-top: var(--wm-space-3);
+  text-align: center;
+  font-size: var(--wm-font-xs);
+  color: var(--wm-text-4);
+}
+
+/* ---------------- 不可支付态 ---------------- */
 .invalid-box {
-  padding: 80px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: var(--wm-space-3);
+  padding: var(--wm-space-8) var(--wm-space-4);
+  background: var(--wm-bg-card);
+  border-radius: var(--wm-radius-lg);
+  box-shadow: var(--wm-shadow-1);
   text-align: center;
 }
+
+.invalid-icon {
+  width: calc(var(--wm-tap-min) + var(--wm-space-5));
+  height: calc(var(--wm-tap-min) + var(--wm-space-5));
+  display: grid;
+  place-items: center;
+  border-radius: var(--wm-radius-full);
+  background: var(--wm-primary-50);
+  color: var(--wm-text-4);
+}
+
 .invalid-text {
-  margin-top: 16px;
-  color: #646566;
-  font-size: 15px;
+  margin-top: var(--wm-space-4);
+  font-size: var(--wm-font-lg);
+  font-weight: 600;
+  line-height: var(--wm-leading-normal);
+  color: var(--wm-text-1);
+}
+
+.invalid-btn {
+  min-height: var(--wm-tap-min);
+  margin-top: var(--wm-space-4);
+  align-self: stretch;
 }
 </style>

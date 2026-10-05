@@ -1,6 +1,90 @@
+/**
+ * 用户端全局样式与设计 token
+ *
+ * 依据：refactoring-ui（视觉层次与间距尺度）、Vant 4 主题定制（CSS 变量）、
+ *      impeccable craft-floor（对比度、阴影须带偏移、不用 emoji 代替图标）
+ *
+ * 约定：组件内一律引用 var(--wm-*)，不再写死颜色、间距、圆角与阴影。
+ */
 :root {
-  --waimai-primary: #ff6034;
-  --waimai-bg: #f5f5f5;
+  /* ---------- 品牌色阶（暖橙）---------- */
+  --wm-primary: #ff6034;
+  --wm-primary-dark: #e64d22;
+  --wm-primary-light: #ff8a3d;
+  --wm-primary-50: #fff5f0;
+  --wm-primary-100: #ffe6da;
+  --wm-primary-200: #ffcbb4;
+
+  /* ---------- 中性色（次要文字保持 4.5:1 对比度）---------- */
+  --wm-text-1: #1a1a1a;
+  --wm-text-2: #4d4d4d;
+  --wm-text-3: #737373;
+  --wm-text-4: #a6a6a6;
+  --wm-bg-page: #f5f6f8;
+  --wm-bg-card: #ffffff;
+  --wm-border: #ebedf0;
+
+  /* ---------- 语义色 ---------- */
+  --wm-success: #07c160;
+  --wm-warning: #ff976a;
+  --wm-danger: #ee0a24;
+
+  /* ---------- 间距刻度（4 的倍数）---------- */
+  --wm-space-1: 4px;
+  --wm-space-2: 8px;
+  --wm-space-3: 12px;
+  --wm-space-4: 16px;
+  --wm-space-5: 20px;
+  --wm-space-6: 24px;
+  --wm-space-8: 32px;
+
+  /* ---------- 圆角 ---------- */
+  --wm-radius-sm: 6px;
+  --wm-radius-md: 10px;
+  --wm-radius-lg: 14px;
+  --wm-radius-xl: 20px;
+  --wm-radius-full: 999px;
+
+  /* ---------- 阴影：一律带偏移 + 柔和模糊，不用零偏移彩色光晕 ---------- */
+  --wm-shadow-1: 0 1px 3px rgba(24, 24, 32, 0.06);
+  --wm-shadow-2: 0 4px 12px rgba(24, 24, 32, 0.08);
+  --wm-shadow-3: 0 8px 24px rgba(24, 24, 32, 0.12);
+  --wm-shadow-primary: 0 6px 16px rgba(255, 96, 52, 0.28);
+
+  /* ---------- 字号与行高 ---------- */
+  --wm-font-xs: 11px;
+  --wm-font-sm: 12px;
+  --wm-font-md: 14px;
+  --wm-font-lg: 16px;
+  --wm-font-xl: 18px;
+  --wm-font-2xl: 22px;
+  --wm-leading-tight: 1.25;
+  --wm-leading-normal: 1.5;
+
+  /* ---------- 触控目标下限（移动端可点区域）---------- */
+  --wm-tap-min: 44px;
+
+  /* ---------- Vant 4 主题变量映射：改这里，全端组件跟随 ---------- */
+  --van-primary-color: var(--wm-primary);
+  --van-success-color: var(--wm-success);
+  --van-danger-color: var(--wm-danger);
+  --van-warning-color: var(--wm-warning);
+  --van-text-color: var(--wm-text-2);
+  --van-text-color-2: var(--wm-text-3);
+  --van-text-color-3: var(--wm-text-4);
+  --van-background: var(--wm-bg-page);
+  --van-background-2: var(--wm-bg-card);
+  --van-border-color: var(--wm-border);
+  --van-radius-md: var(--wm-radius-md);
+  --van-radius-lg: var(--wm-radius-lg);
+  --van-cell-font-size: var(--wm-font-md);
+  --van-tabbar-item-active-color: var(--wm-primary);
+  --van-tabbar-item-font-size: var(--wm-font-sm);
+  --van-empty-description-color: var(--wm-text-4);
+
+  /* 兼容早期变量名，后续逐步迁移 */
+  --waimai-primary: var(--wm-primary);
+  --waimai-bg: var(--wm-bg-page);
 }
 
 * {
@@ -10,27 +94,39 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', sans-serif;
-  background: var(--waimai-bg);
-  color: #333;
+  font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC',
+    'Microsoft YaHei', sans-serif;
+  background: var(--wm-bg-page);
+  color: var(--wm-text-2);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
+/* 页面容器：底部为 tabbar（50px）与安全区留白 */
 .page {
   min-height: 100vh;
-  padding-bottom: 50px;
+  padding-bottom: calc(50px + env(safe-area-inset-bottom));
+}
+
+/* 键盘焦点可见，颜色取自调色板 */
+:focus-visible {
+  outline: 2px solid var(--wm-primary);
+  outline-offset: 2px;
 }
 
 .primary-text {
-  color: var(--waimai-primary);
+  color: var(--wm-primary);
 }
 
+/* 价格：统一货币前缀、字重与等宽数字，避免各页各写一套 */
 .price {
-  color: var(--waimai-primary);
+  color: var(--wm-primary);
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .price::before {
   content: '¥';
-  font-size: 0.7em;
+  font-size: 0.72em;
+  margin-right: 1px;
 }

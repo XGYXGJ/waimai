@@ -55,6 +55,35 @@ export function isTokenExpired(token: string | null): boolean {
   return payload.exp * 1000 <= Date.now();
 }
 
+/** access token 剩余有效期不足该值时提前续期，避免「用着用着突然 401」 */
+const REFRESH_SKEW_MS = 5 * 60 * 1000;
+
+/** token 是否即将过期（剩余不足 skewMs；无 token 视为即将过期） */
+export function isTokenExpiringSoon(token: string | null, skewMs = REFRESH_SKEW_MS): boolean {
+  const payload = parseJwt(token);
+  if (!payload || !payload.exp) return true;
+  return payload.exp * 1000 - Date.now() <= skewMs;
+}
+
+/** refresh token 是否仍在有效期内（决定还能不能静默续期） */
+export function isRefreshValid(): boolean {
+  const rt = getRefreshToken();
+  if (!rt) return false;
+  const payload = parseJwt(rt);
+  return !!payload?.exp && payload.exp * 1000 > Date.now();
+}
+
+/**
+ * 本地会话是否仍然可用：access token 未过期，或 refresh token 尚未过期（可由拦截器静默续期）。
+ * 路由守卫必须用它 —— 只判断 access token 会在 2 小时后误杀 7/30 天的登录态，
+ * 并且 clearAuth() 会把 refresh token 一起销毁，导致永远无法续期。
+ */
+export function hasValidSession(): boolean {
+  const token = getToken();
+  if (token && !isTokenExpired(token)) return true;
+  return isRefreshValid();
+}
+
 export const BASE_URL = import.meta.env.VITE_API_BASE || '/api';
 
 const instance = axios.create({ baseURL: BASE_URL, timeout: 15000 });
@@ -84,33 +113,41 @@ async function doRefresh(): Promise<string | null> {
   }
 }
 
-/** 确保 access token 有效：过期则尝试刷新 */
-async function ensureFreshToken(): Promise<string | null> {
+/**
+ * 确保拿到可用的 access token。
+ * @param force true = 即使当前 token 还没过期也去换一个新的（提前续期 / 401 重试用）
+ */
+async function ensureFreshToken(force = false): Promise<string | null> {
   const token = getToken();
-  if (!token) return null;
-  if (!isTokenExpired(token)) return token;
-  // 过期 → 刷新
+  if (!force && token && !isTokenExpired(token)) return token;
+  // 需要刷新 → 复用同一个 Promise，避免并发重复刷新
   if (!refreshing) {
     refreshing = doRefresh().finally(() => {
       refreshing = null;
     });
   }
-  return refreshing;
+  const fresh = await refreshing;
+  if (fresh) return fresh;
+  // 刷新失败：只要原 token 还没过期就先用着，避免把「其实还能用」的会话直接踢掉
+  return token && !isTokenExpired(token) ? token : null;
 }
 
 instance.interceptors.request.use(async (config) => {
   const token = getToken();
   if (token) {
-    // 若 token 已过期，先尝试刷新再带新 token
-    if (isTokenExpired(token)) {
-      const fresh = await ensureFreshToken();
+    // 已过期、或即将过期（不足 5 分钟）→ 先静默续期，避免请求途中失效
+    if (isTokenExpired(token) || isTokenExpiringSoon(token)) {
+      const fresh = await ensureFreshToken(true);
       if (fresh) {
         config.headers.Authorization = `Bearer ${fresh}`;
-      } else {
-        // 刷新失败 → 清除登录态并跳登录页
+      } else if (isTokenExpired(token)) {
+        // 真的续不上了 → 清除登录态并跳登录页
         clearAuth();
         redirectToLogin();
         return Promise.reject(new Error('登录已过期，请重新登录'));
+      } else {
+        // 续期失败但原 token 还没过期：先用着，不掉线
+        config.headers.Authorization = `Bearer ${token}`;
       }
     } else {
       config.headers.Authorization = `Bearer ${token}`;
@@ -143,9 +180,19 @@ instance.interceptors.response.use(
     }
     return r.data;
   },
-  (err) => {
+  async (err) => {
     const status = err?.response?.status;
+    const cfg = err?.config;
     if (status === 401) {
+      // 401 多半是「access token 刚过期」：先刷新再重放原请求一次，用户无感
+      if (cfg && !cfg.__retried) {
+        cfg.__retried = true;
+        const fresh = await ensureFreshToken(true);
+        if (fresh) {
+          cfg.headers = { ...(cfg.headers || {}), Authorization: `Bearer ${fresh}` };
+          return instance.request(cfg);
+        }
+      }
       clearAuth();
       redirectToLogin();
     }

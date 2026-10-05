@@ -453,3 +453,17 @@ CREATE TABLE `im_ticket` (
   KEY `idx_order` (`order_id`),
   KEY `idx_user` (`user_id`, `created_at`)
 ) ENGINE=InnoDB COMMENT='售后工单';
+
+CREATE TABLE `operation_log` (
+  `id`          BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
+  `admin_id`    BIGINT       DEFAULT NULL COMMENT '操作人 user.id（ADMIN）',
+  `action`      VARCHAR(64)  NOT NULL     COMMENT '动作码: AUDIT_MERCHANT/AUDIT_RIDER/CHANGE_USER_STATUS/REFUND_ORDER/DELETE_REVIEW/AUDIT_CAMPAIGN',
+  `target_type` VARCHAR(32)  DEFAULT NULL COMMENT '目标类型: MERCHANT/RIDER/USER/ORDER/REVIEW/BID_CAMPAIGN',
+  `target_id`   BIGINT       DEFAULT NULL COMMENT '目标 ID',
+  `detail`      VARCHAR(500) DEFAULT NULL COMMENT '详情（审核结果、退款金额等）',
+  `ip`          VARCHAR(64)  DEFAULT NULL COMMENT '操作来源 IP',
+  `created_at`  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '发生时间',
+  KEY `idx_admin` (`admin_id`),
+  KEY `idx_action` (`action`),
+  KEY `idx_created` (`created_at`)
+) ENGINE=InnoDB COMMENT='管理端操作日志';

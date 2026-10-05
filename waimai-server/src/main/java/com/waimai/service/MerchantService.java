@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.waimai.common.exception.BizException;
 import com.waimai.common.result.ResultCode;
 import com.waimai.common.util.GeoUtil;
+import com.waimai.common.util.SensitiveWordUtil;
 import com.waimai.dto.WebDTO;
 import com.waimai.entity.*;
 import com.waimai.mapper.*;
@@ -214,7 +215,7 @@ public class MerchantService {
     public void updateShop(Long merchantUserId, WebDTO.ShopUpdateReq req) {
         Merchant m = merchantOfUser(merchantUserId);
         if (req.getShopName() != null) m.setShopName(req.getShopName());
-        if (req.getNotice() != null) m.setNotice(req.getNotice());
+        if (req.getNotice() != null) m.setNotice(SensitiveWordUtil.filter(req.getNotice()));
         if (req.getPhone() != null) m.setPhone(req.getPhone());
         if (req.getAddress() != null) m.setAddress(req.getAddress());
         if (req.getLogo() != null) m.setLogo(req.getLogo());

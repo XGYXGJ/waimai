@@ -25,6 +25,9 @@ import java.util.Set;
 public class AuthService {
 
     private static final Set<String> REGISTERABLE = Set.of("USER", "MERCHANT", "RIDER");
+
+    /** 勾选「30 天免登录」后 refresh token 的有效天数（硬过期：刷新不延长总时长） */
+    private static final long REMEMBER_REFRESH_DAYS = 30;
     private final UserMapper userMapper;
     private final MerchantMapper merchantMapper;
     private final RiderMapper riderMapper;
@@ -75,15 +78,31 @@ public class AuthService {
     }
 
     public Map<String, Object> login(String phone, String password) {
+        return login(phone, password, false);
+    }
+
+    /**
+     * 登录。
+     * @param remember true = 「30 天免登录」，签发长期 refresh token；false = 默认短期
+     */
+    public Map<String, Object> login(String phone, String password, boolean remember) {
         User user = userMapper.selectOne(new QueryWrapper<User>().eq("phone", phone));
         if (user == null || !encoder.matches(password, user.getPasswordHash())) {
             throw new BizException("手机号或密码错误");
         }
         if (user.getStatus() == 0) throw new BizException("账号已被封禁，请联系平台");
 
+        String refreshToken = remember
+                ? jwtUtil.genRefreshToken(user.getId(), user.getRole(), REMEMBER_REFRESH_DAYS)
+                : jwtUtil.genRefreshToken(user.getId(), user.getRole());
+        java.util.Date refreshExp = jwtUtil.expiration(refreshToken);
+
         Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("accessToken", jwtUtil.genAccessToken(user.getId(), user.getRole()));
-        resp.put("refreshToken", jwtUtil.genRefreshToken(user.getId(), user.getRole()));
+        resp.put("refreshToken", refreshToken);
+        // 前端据此知道「免登录」到什么时候，不必自己解 JWT
+        resp.put("refreshExpiresAt", refreshExp == null ? null : refreshExp.getTime());
+        resp.put("remember", remember);
         resp.put("profile", buildProfile(user));
         return resp;
     }
@@ -91,11 +110,17 @@ public class AuthService {
     public Map<String, Object> refresh(String refreshToken) {
         String[] parsed = jwtUtil.parse(refreshToken);
         if (parsed == null) throw new BizException(ResultCode.UNAUTHORIZED, "refreshToken无效");
+        // 硬过期：沿用旧凭证的原始到期时间，刷新只换新的 access token，不把总登录时长往后推
+        java.util.Date expiresAt = jwtUtil.expiration(refreshToken);
+        if (expiresAt == null || expiresAt.before(new java.util.Date())) {
+            throw new BizException(ResultCode.UNAUTHORIZED, "登录已过期，请重新登录");
+        }
         User user = userMapper.selectById(Long.valueOf(parsed[0]));
         if (user == null || user.getStatus() == 0) throw new BizException(ResultCode.UNAUTHORIZED, "账号不可用");
         Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("accessToken", jwtUtil.genAccessToken(user.getId(), user.getRole()));
-        resp.put("refreshToken", jwtUtil.genRefreshToken(user.getId(), user.getRole()));
+        resp.put("refreshToken", jwtUtil.genRefreshTokenUntil(user.getId(), user.getRole(), expiresAt));
+        resp.put("refreshExpiresAt", expiresAt.getTime());
         return resp;
     }
 

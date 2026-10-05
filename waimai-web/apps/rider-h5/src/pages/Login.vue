@@ -6,6 +6,11 @@
         <van-field v-model="phone" label="手机号" placeholder="请输入手机号" type="tel" />
         <van-field v-model="password" label="密码" placeholder="请输入密码" type="password" />
       </van-cell-group>
+      <div class="remember-row">
+        <van-checkbox v-model="remember" checked-color="var(--wm-primary, var(--waimai-primary))">
+          30 天免登录
+        </van-checkbox>
+      </div>
       <div style="margin: 24px 16px">
         <van-button round block type="primary" native-type="submit" color="#07c160">登录</van-button>
       </div>
@@ -33,6 +38,7 @@ import { apiLogin, apiRegister } from '@/api';
 const router = useRouter();
 const phone = ref('');
 const password = ref('');
+const remember = ref(true);
 const showRegister = ref(false);
 
 const regPhone = ref('');
@@ -41,7 +47,7 @@ const regNickname = ref('');
 
 async function login() {
   try {
-    const res = await apiLogin(phone.value, password.value);
+    const res = await apiLogin(phone.value, password.value, remember.value);
     setAuth(res.accessToken, res.refreshToken);
     showToast('登录成功');
     router.replace('/');
@@ -91,5 +97,17 @@ async function register() {
   color: #07c160;
   margin-top: 16px;
   font-size: 14px;
+}
+.remember-row {
+  display: flex;
+  align-items: center;
+  min-height: var(--wm-tap-min, 44px);
+  padding: 0 32px;
+  color: var(--wm-text-2, #4d4d4d);
+  font-size: var(--wm-font-md, 14px);
+}
+.remember-row :deep(.van-checkbox__label) {
+  color: var(--wm-text-2, #4d4d4d);
+  font-size: var(--wm-font-md, 14px);
 }
 </style>

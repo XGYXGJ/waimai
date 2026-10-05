@@ -1,8 +1,9 @@
 import { get, post, put, del, type Merchant, type Dish, type Order, type RecommendItem, type Address, type CartItem, type Coupon } from '@waimai/shared';
 
 // 认证
-export const apiLogin = (phone: string, password: string) =>
-  post<{ accessToken: string; refreshToken: string }>('/auth/login', { phone, password });
+// remember=true 时后端签发 30 天有效期的 refresh token（「30 天免登录」）
+export const apiLogin = (phone: string, password: string, remember = false) =>
+  post<{ accessToken: string; refreshToken: string }>('/auth/login', { phone, password, remember });
 export const apiRegister = (data: any) => post('/auth/register', data);
 export const apiMe = () => get('/auth/me');
 

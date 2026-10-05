@@ -1,77 +1,126 @@
 <template>
   <div class="home">
-    <!-- 顶部定位 + 搜索 -->
-    <div class="header">
-      <div class="location">
-        <span class="loc-text" @click="goLocation">📍 {{ locationText }}</span>
-        <span class="loc-actions">
-          <span class="relocate" @click.stop="refreshLocation">
-            <van-icon name="replay" size="12" /> 刷新定位
-          </span>
-          <span class="relocate" @click.stop="goLocation">
-            <van-icon name="edit" size="12" /> 手动设置
-          </span>
-        </span>
+    <!-- 顶部：定位 + 搜索 -->
+    <header class="hero">
+      <div class="hero-row">
+        <button class="loc-btn" type="button" @click="goLocation">
+          <van-icon name="location-o" size="16" />
+          <span class="loc-text">{{ locationText }}</span>
+          <van-icon name="arrow" size="12" class="loc-arrow" />
+        </button>
+        <div class="loc-tools">
+          <button class="tool-btn" type="button" @click.stop="refreshLocation">
+            <van-icon name="replay" size="15" />
+            <span>刷新</span>
+          </button>
+          <button class="tool-btn" type="button" @click.stop="goLocation">
+            <van-icon name="edit" size="15" />
+            <span>设置</span>
+          </button>
+        </div>
       </div>
-      <van-search v-model="keyword" placeholder="搜索商家、菜品" shape="round" @search="goSearch" />
-    </div>
+      <div class="hero-search">
+        <van-search
+          v-model="keyword"
+          placeholder="搜索商家、菜品"
+          shape="round"
+          background="transparent"
+          @search="goSearch"
+        />
+      </div>
+    </header>
 
-    <!-- 分类宫格 -->
-    <van-grid :column-num="4" class="categories" v-if="categories.length">
-      <van-grid-item v-for="c in categories" :key="c.id" :icon="c.icon || 'shop-o'" :text="c.name" @click="filterCategory(c.id)" />
-    </van-grid>
+    <!-- 分类：横向滚动圆形入口 -->
+    <nav class="cats" v-if="categories.length" aria-label="商家分类">
+      <button
+        v-for="c in categories"
+        :key="c.id"
+        class="cat"
+        :class="{ 'cat--on': categoryId === c.id }"
+        type="button"
+        @click="filterCategory(c.id)"
+      >
+        <span class="cat-icon">
+          <van-icon :name="c.icon || 'shop-o'" size="20" />
+        </span>
+        <span class="cat-name">{{ c.name }}</span>
+      </button>
+    </nav>
 
     <!-- AI 每日推荐 -->
-    <div class="section" v-if="recommends.length">
-      <div class="section-title">
-        <span class="title-ai">🤖 AI 每日推荐</span>
-        <span class="sub">为你精选</span>
+    <section class="section" v-if="recommends.length">
+      <div class="section-head">
+        <h2 class="section-title">AI 每日推荐</h2>
+        <span class="section-sub">为你精选</span>
       </div>
-      <div class="recommend-scroll">
-        <div class="recommend-card" v-for="r in recommends" :key="r.dishId" @click="goMerchant(r.merchantId)">
-          <div class="dish-name">{{ r.dishName }}</div>
-          <div class="dish-reason">{{ r.reason }}</div>
-          <div class="dish-price price">{{ r.price }}</div>
-        </div>
+      <div class="rec-scroll">
+        <article
+          class="rec-card"
+          v-for="r in recommends"
+          :key="r.dishId"
+          @click="goMerchant(r.merchantId)"
+        >
+          <span class="rec-badge">AI 推荐</span>
+          <h3 class="rec-name">{{ r.dishName }}</h3>
+          <p class="rec-reason">{{ r.reason }}</p>
+          <div class="rec-foot">
+            <span class="price">{{ r.price }}</span>
+            <van-icon name="arrow" size="12" class="rec-go" />
+          </div>
+        </article>
       </div>
-    </div>
+    </section>
 
     <!-- 附近商家 -->
-    <div class="section">
-      <div class="section-title">
-        <span>附近商家</span>
-        <span class="sub" @click="cycleSort">{{ sortLabel }}</span>
+    <section class="section">
+      <div class="section-head">
+        <h2 class="section-title">附近商家</h2>
+        <button class="sort-btn" type="button" @click="cycleSort">
+          {{ sortLabel }}
+          <van-icon name="arrow-down" size="10" />
+        </button>
       </div>
+
       <van-skeleton v-if="loading" :row="3" />
-      <div class="merchant-list" v-else>
-        <div class="merchant-item" v-for="m in merchants" :key="m.id" @click="goMerchant(m.id)">
-          <div class="merchant-left">
-            <div class="merchant-logo">{{ (m.shopName || '商')[0] }}</div>
-          </div>
-          <div class="merchant-info">
-            <div class="merchant-name">
-              {{ m.shopName }}
-              <van-tag v-if="m.isAd" type="warning" plain size="mini">广告</van-tag>
+      <div class="m-list" v-else>
+        <article class="m-card" v-for="m in merchants" :key="m.id" @click="goMerchant(m.id)">
+          <div class="m-logo" aria-hidden="true">{{ (m.shopName || '商')[0] }}</div>
+          <div class="m-body">
+            <div class="m-top">
+              <h3 class="m-name">{{ m.shopName }}</h3>
+              <span v-if="m.isAd" class="m-ad">广告</span>
             </div>
-            <div class="merchant-meta">⭐ {{ m.rating || 4.5 }} · 月售{{ m.monthlySales || 0 }}</div>
-            <div class="merchant-meta">
-              起送¥{{ m.minOrderAmount || 0 }} · 配送¥{{ money(m.deliveryFee) }}
-              <template v-if="m.distanceKm"> · {{ m.distanceKm }}km</template>
-              <template v-if="m.deliveryRadiusKm">（配送范围{{ m.deliveryRadiusKm }}km）</template>
+            <div class="m-rate">
+              <span class="m-score">{{ m.rating || 4.5 }}</span>
+              <van-icon name="star" size="11" class="m-star" />
+              <span class="m-dot">·</span>
+              <span>月售 {{ m.monthlySales || 0 }}</span>
+            </div>
+            <div class="m-ship">
+              <span>起送 ¥{{ money(m.minOrderAmount) }}</span>
+              <span class="m-dot">·</span>
+              <span>配送 ¥{{ money(m.deliveryFee) }}</span>
+              <template v-if="m.distanceKm">
+                <span class="m-dot">·</span>
+                <span>{{ m.distanceKm }} km</span>
+              </template>
+            </div>
+            <div class="m-range" v-if="m.deliveryRadiusKm">
+              配送范围 {{ m.deliveryRadiusKm }} km
             </div>
           </div>
-        </div>
+        </article>
         <van-empty v-if="!merchants.length" :description="emptyDesc" />
       </div>
-    </div>
+    </section>
 
     <!-- 购物车悬浮入口：不用进商家详情页也能直接去结算 -->
-    <div class="cart-fab" @click="goCart">
+    <button class="cart-fab" type="button" aria-label="去购物车结算" @click="goCart">
       <van-badge :content="cartBadge" :show-zero="false" :offset="[-2, 2]">
-        <van-icon name="shopping-cart-o" size="24" color="#fff" />
+        <van-icon name="shopping-cart-o" size="24" />
       </van-badge>
-      <div class="fab-text">购物车</div>
-    </div>
+      <span class="fab-text">购物车</span>
+    </button>
   </div>
 </template>
 
@@ -240,148 +289,401 @@ onMounted(() => {
 
 <style scoped>
 .home {
-  background: #f5f5f5;
+  background: var(--wm-bg-page);
+  padding-bottom: var(--wm-space-6);
 }
-.header {
-  background: linear-gradient(135deg, #ff6034, #ff8a3d);
-  padding: 12px 0 16px;
+
+/* ---------------- 顶部 hero ---------------- */
+.hero {
+  background: linear-gradient(
+    160deg,
+    var(--wm-primary-light) 0%,
+    var(--wm-primary) 58%,
+    var(--wm-primary-dark) 100%
+  );
+  padding: var(--wm-space-4) var(--wm-space-4) var(--wm-space-6);
+  border-radius: 0 0 var(--wm-radius-xl) var(--wm-radius-xl);
 }
-.location {
-  color: #fff;
-  padding: 0 16px;
-  font-size: 14px;
+
+.hero-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: var(--wm-space-2);
 }
+
+.loc-btn {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wm-space-2);
+  min-height: var(--wm-tap-min);
+  padding: 0 var(--wm-space-3);
+  border: 0;
+  border-radius: var(--wm-radius-full);
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-size: var(--wm-font-md);
+  cursor: pointer;
+}
+
 .loc-text {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  cursor: pointer;
+  text-align: left;
 }
-.loc-actions {
+
+.loc-arrow {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.loc-tools {
   display: inline-flex;
-  align-items: center;
-  gap: 12px;
+  gap: var(--wm-space-1);
   flex-shrink: 0;
 }
-.relocate {
-  font-size: 12px;
-  opacity: 0.9;
+
+.tool-btn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: var(--wm-tap-min);
+  min-height: var(--wm-tap-min);
+  border: 0;
+  border-radius: var(--wm-radius-md);
+  background: transparent;
+  color: #fff;
+  font-size: var(--wm-font-xs);
+  cursor: pointer;
+}
+
+.tool-btn:active {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.hero-search {
+  margin-top: var(--wm-space-3);
+}
+
+.hero-search :deep(.van-search) {
+  padding: 0;
+}
+
+.hero-search :deep(.van-search__content) {
+  background: #fff;
+  box-shadow: var(--wm-shadow-1);
+}
+
+/* ---------------- 分类 ---------------- */
+.cats {
+  display: flex;
+  gap: var(--wm-space-2);
+  overflow-x: auto;
+  margin: calc(-1 * var(--wm-space-5)) var(--wm-space-3) 0;
+  padding: var(--wm-space-3) var(--wm-space-3) var(--wm-space-2);
+  background: var(--wm-bg-card);
+  border-radius: var(--wm-radius-lg);
+  box-shadow: var(--wm-shadow-2);
+  scrollbar-width: none;
+}
+
+.cats::-webkit-scrollbar {
+  display: none;
+}
+
+.cat {
+  flex: 0 0 auto;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--wm-space-2);
+  min-width: 64px;
+  min-height: var(--wm-tap-min);
+  padding: var(--wm-space-1) 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.cat-icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--wm-radius-full);
+  background: var(--wm-primary-50);
+  color: var(--wm-primary);
+  transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+.cat--on .cat-icon {
+  background: var(--wm-primary);
+  color: #fff;
+}
+
+.cat-name {
+  font-size: var(--wm-font-sm);
+  color: var(--wm-text-2);
+  white-space: nowrap;
+}
+
+.cat--on .cat-name {
+  color: var(--wm-primary);
+  font-weight: 600;
+}
+
+/* ---------------- 通用区块 ---------------- */
+.section {
+  margin: var(--wm-space-3) var(--wm-space-3) 0;
+  padding: var(--wm-space-4);
+  background: var(--wm-bg-card);
+  border-radius: var(--wm-radius-lg);
+  box-shadow: var(--wm-shadow-1);
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--wm-space-2);
+  margin-bottom: var(--wm-space-3);
+}
+
+.section-title {
+  font-size: var(--wm-font-lg);
+  font-weight: 600;
+  line-height: var(--wm-leading-tight);
+  color: var(--wm-text-1);
+}
+
+.section-sub {
+  font-size: var(--wm-font-sm);
+  color: var(--wm-text-3);
+}
+
+.sort-btn {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.categories {
-  background: #fff;
-  margin-top: -1px;
-}
-.section {
-  margin-top: 12px;
-  background: #fff;
-  padding: 12px 16px;
-}
-.section-title {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 16px;
-  font-weight: 600;
-  margin-bottom: 12px;
-}
-.title-ai {
-  color: #ff6034;
-}
-.sub {
-  color: #999;
-  font-size: 13px;
-  font-weight: normal;
-}
-.recommend-scroll {
-  display: flex;
-  overflow-x: auto;
-  gap: 10px;
-}
-.recommend-card {
-  flex: 0 0 130px;
-  background: #fff7f3;
-  border: 1px solid #ffd9c9;
-  border-radius: 10px;
-  padding: 12px;
-}
-.dish-name {
-  font-weight: 600;
-  font-size: 15px;
-}
-.dish-reason {
-  font-size: 12px;
-  color: #999;
-  margin: 8px 0;
   min-height: 32px;
+  padding: 0 var(--wm-space-3);
+  border: 1px solid var(--wm-border);
+  border-radius: var(--wm-radius-full);
+  background: var(--wm-bg-card);
+  color: var(--wm-text-3);
+  font-size: var(--wm-font-sm);
+  cursor: pointer;
 }
-.merchant-list {
+
+/* ---------------- AI 推荐 ---------------- */
+.rec-scroll {
+  display: flex;
+  gap: var(--wm-space-3);
+  overflow-x: auto;
+  margin: 0 calc(-1 * var(--wm-space-4));
+  padding: 0 var(--wm-space-4) var(--wm-space-1);
+  scrollbar-width: none;
+}
+
+.rec-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.rec-card {
+  flex: 0 0 156px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  padding: var(--wm-space-3);
+  border: 1px solid var(--wm-primary-100);
+  border-radius: var(--wm-radius-md);
+  background: var(--wm-primary-50);
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
-.merchant-item {
+
+.rec-card:active {
+  transform: scale(0.98);
+  box-shadow: var(--wm-shadow-1);
+}
+
+.rec-badge {
+  align-self: flex-start;
+  padding: 1px var(--wm-space-2);
+  border-radius: var(--wm-radius-full);
+  background: var(--wm-primary);
+  color: #fff;
+  font-size: var(--wm-font-xs);
+  line-height: 18px;
+}
+
+.rec-name {
+  margin-top: var(--wm-space-2);
+  font-size: var(--wm-font-md);
+  font-weight: 600;
+  color: var(--wm-text-1);
+}
+
+.rec-reason {
+  margin-top: var(--wm-space-1);
+  min-height: 36px;
+  font-size: var(--wm-font-sm);
+  line-height: var(--wm-leading-normal);
+  color: var(--wm-text-3);
+}
+
+.rec-foot {
   display: flex;
-  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--wm-space-2);
 }
-.merchant-logo {
+
+.rec-go {
+  color: var(--wm-primary);
+}
+
+/* ---------------- 商家列表 ---------------- */
+.m-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wm-space-3);
+}
+
+.m-card {
+  display: flex;
+  gap: var(--wm-space-3);
+  padding: var(--wm-space-3);
+  border: 1px solid var(--wm-border);
+  border-radius: var(--wm-radius-md);
+  background: var(--wm-bg-card);
+  cursor: pointer;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.m-card:active {
+  border-color: var(--wm-primary-200);
+  box-shadow: var(--wm-shadow-1);
+}
+
+.m-logo {
+  flex: 0 0 56px;
   width: 56px;
   height: 56px;
-  border-radius: 10px;
-  background: #ff6034;
+  display: grid;
+  place-items: center;
+  border-radius: var(--wm-radius-md);
+  background: linear-gradient(150deg, var(--wm-primary-light), var(--wm-primary));
   color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  font-weight: bold;
-}
-.merchant-info {
-  flex: 1;
-}
-.merchant-name {
+  font-size: var(--wm-font-2xl);
   font-weight: 600;
-  font-size: 15px;
+  box-shadow: var(--wm-shadow-1);
+}
+
+.m-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.m-top {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--wm-space-2);
 }
-.merchant-meta {
-  font-size: 12px;
-  color: #999;
-  margin-top: 4px;
+
+.m-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--wm-font-lg);
+  font-weight: 600;
+  line-height: var(--wm-leading-tight);
+  color: var(--wm-text-1);
 }
-/* 购物车悬浮入口：停在 tabbar 之上 */
+
+.m-ad {
+  flex-shrink: 0;
+  padding: 1px var(--wm-space-2);
+  border: 1px solid var(--wm-primary-200);
+  border-radius: var(--wm-radius-sm);
+  color: var(--wm-primary);
+  font-size: var(--wm-font-xs);
+  line-height: 16px;
+}
+
+.m-rate {
+  display: flex;
+  align-items: center;
+  gap: var(--wm-space-1);
+  margin-top: var(--wm-space-2);
+  font-size: var(--wm-font-sm);
+  color: var(--wm-text-3);
+}
+
+.m-score {
+  color: var(--wm-primary);
+  font-weight: 600;
+}
+
+.m-star {
+  color: var(--wm-primary);
+}
+
+.m-dot {
+  color: var(--wm-text-4);
+}
+
+.m-ship {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--wm-space-1);
+  margin-top: var(--wm-space-1);
+  font-size: var(--wm-font-sm);
+  color: var(--wm-text-3);
+}
+
+.m-range {
+  margin-top: var(--wm-space-1);
+  font-size: var(--wm-font-xs);
+  color: var(--wm-text-4);
+}
+
+/* ---------------- 购物车悬浮入口 ---------------- */
 .cart-fab {
   position: fixed;
-  right: 16px;
+  right: var(--wm-space-4);
   bottom: calc(66px + env(safe-area-inset-bottom));
   z-index: 20;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #ff6034, #ff8a3d);
-  color: #fff;
-  display: flex;
+  width: 58px;
+  height: 58px;
+  display: inline-flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 12px rgba(255, 96, 52, 0.4);
+  gap: 1px;
+  border: 0;
+  border-radius: var(--wm-radius-full);
+  background: linear-gradient(150deg, var(--wm-primary-light), var(--wm-primary));
+  color: #fff;
+  box-shadow: var(--wm-shadow-primary);
   cursor: pointer;
+  transition: transform 0.18s ease;
 }
+
+.cart-fab:active {
+  transform: scale(0.94);
+}
+
 .fab-text {
-  font-size: 9px;
-  margin-top: 1px;
+  font-size: var(--wm-font-xs);
   line-height: 1;
 }
 </style>

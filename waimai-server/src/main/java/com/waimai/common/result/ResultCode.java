@@ -18,4 +18,6 @@ public class ResultCode {
     public static final int REPEAT_SUBMIT = 40013;
     /** 收货地址超出商家配送范围 */
     public static final int OUT_OF_DELIVERY_RANGE = 40014;
+    /** 请求过于频繁（登录/注册 IP 限流） */
+    public static final int TOO_MANY_REQUESTS = 40015;
 }

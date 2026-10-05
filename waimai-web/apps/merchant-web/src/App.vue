@@ -36,13 +36,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { getToken, clearAuth, isTokenExpired, get } from '@waimai/shared';
+import { hasValidSession, clearAuth, get } from '@waimai/shared';
 
 const router = useRouter();
-const isLoggedIn = computed(() => {
-  const t = getToken();
-  return !!t && !isTokenExpired(t);
-});
+const isLoggedIn = computed(() => hasValidSession());
 const shopName = ref('');
 
 function handleCommand(cmd: string) {
@@ -53,7 +50,7 @@ function handleCommand(cmd: string) {
 }
 
 onMounted(async () => {
-  if (getToken()) {
+  if (hasValidSession()) {
     try {
       const data: any = await get('/merchant/shop/info');
       shopName.value = data.shopName || '';

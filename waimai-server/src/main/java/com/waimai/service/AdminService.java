@@ -28,6 +28,8 @@ public class AdminService {
     private final BidCampaignMapper bidCampaignMapper;
     private final OrderService orderService;
     private final PricingService pricingService;
+    /** 管理端关键操作留痕（审核/退款/封禁/删评/竞价审核） */
+    private final OperationLogService operationLogService;
 
     /** 计入收入统计的订单状态：已支付且未被退款/取消 */
     private static final List<String> SETTLED_STATUS =
@@ -50,6 +52,9 @@ public class AdminService {
         m.setAuditStatus(pass ? 1 : 2);
         m.setAuditRemark(remark);
         merchantMapper.updateById(m);
+        operationLogService.record("AUDIT_MERCHANT", "MERCHANT", id,
+                (pass ? "审核通过" : "审核驳回")
+                        + (remark == null || remark.isBlank() ? "" : "：" + remark));
     }
 
     /* ---------- 骑手 ---------- */
@@ -68,6 +73,7 @@ public class AdminService {
         if (r == null) throw new BizException("骑手不存在");
         r.setAuditStatus(pass ? 1 : 2);
         riderMapper.updateById(r);
+        operationLogService.record("AUDIT_RIDER", "RIDER", id, pass ? "审核通过" : "审核驳回");
     }
 
     /* ---------- 用户 ---------- */
@@ -87,6 +93,8 @@ public class AdminService {
         if (u == null) throw new BizException("用户不存在");
         u.setStatus(status);
         userMapper.updateById(u);
+        operationLogService.record("CHANGE_USER_STATUS", "USER", id,
+                "账号状态改为 " + status + (status != null && status == 0 ? "（封禁）" : "（正常）"));
     }
 
     /* ---------- 订单 ---------- */
@@ -115,6 +123,8 @@ public class AdminService {
         o.setCancelBy("ADMIN");
         o.setCancelReason("平台退款");
         ordersMapper.updateById(o);
+        operationLogService.record("REFUND_ORDER", "ORDER", orderId,
+                "平台退款 " + o.getOrderNo() + "，金额 " + o.getPayAmount());
     }
 
     /* ---------- 评价治理 ---------- */
@@ -129,7 +139,10 @@ public class AdminService {
     }
 
     public void deleteReview(Long id) {
+        Review r = reviewMapper.selectById(id);
         reviewMapper.deleteById(id);
+        operationLogService.record("DELETE_REVIEW", "REVIEW", id,
+                r == null ? "删除评价" : "删除违规评价（评分 " + r.getRating() + "）");
     }
 
     /* ---------- 竞价审核 ---------- */
@@ -139,6 +152,7 @@ public class AdminService {
         if (c == null) throw new BizException("投放计划不存在");
         c.setStatus(pass ? 1 : 0);
         bidCampaignMapper.updateById(c);
+        operationLogService.record("AUDIT_CAMPAIGN", "BID_CAMPAIGN", id, pass ? "审核通过" : "审核驳回");
     }
 
     /* ---------- 数据大屏 ---------- */

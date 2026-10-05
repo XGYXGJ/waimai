@@ -2,10 +2,12 @@
   <div class="im-page">
     <van-nav-bar :title="title" left-arrow @click-left="$router.back()" />
 
+    <!-- 消息流：自己发的品牌色气泡，对方用页面底色气泡 -->
     <div class="im-body" ref="bodyRef">
       <div v-for="m in messages" :key="m.id" :class="['msg', m.senderRole === 'USER' ? 'mine' : 'other']">
         <!-- 系统提示 -->
         <div v-if="m.senderRole === 'SYSTEM' && m.msgType !== 'ORDER'" class="sys-tip">
+          <van-icon name="volume-o" size="12" />
           <span v-if="m.msgType === 'TICKET'">工单动态</span>
           <span v-else>{{ m.content }}</span>
         </div>
@@ -13,7 +15,10 @@
         <!-- 订单卡片 -->
         <div v-else-if="m.msgType === 'ORDER'" class="order-card" @click="goOrder(m.payload?.orderId)">
           <div class="oc-head">
-            <span class="oc-shop">{{ m.payload?.merchantName || '商家' }}</span>
+            <span class="oc-shop">
+              <van-icon name="shop-o" size="14" />
+              <span class="oc-shop-name">{{ m.payload?.merchantName || '商家' }}</span>
+            </span>
             <span class="oc-status">{{ orderStatusText(m.payload?.status) }}</span>
           </div>
           <div class="oc-item" v-for="(it, i) in m.payload?.items || []" :key="i">
@@ -29,7 +34,10 @@
         <!-- 工单卡片 -->
         <div v-else-if="m.msgType === 'TICKET'" class="ticket-card">
           <div class="tc-head">
-            <span class="tc-type">{{ m.payload?.typeText || '工单' }}</span>
+            <span class="tc-type">
+              <van-icon name="records" size="14" />
+              <span class="tc-type-text">{{ m.payload?.typeText || '工单' }}</span>
+            </span>
             <span class="tc-amount">¥{{ m.payload?.amount ?? 0 }}</span>
             <van-tag :type="ticketTagType(m.payload?.status)" size="medium">
               {{ m.payload?.statusText || '' }}
@@ -60,11 +68,16 @@
       </div>
     </div>
 
+    <!-- 输入区：固定在底部，带安全区留白，保证不被 tabbar / 手势条挡住 -->
     <div class="im-input">
-      <van-icon name="photograph" size="22" @click="pickImage" />
-      <van-field v-model="text" placeholder="说点什么..." @keyup.enter="sendText" />
-      <van-button size="small" type="primary" color="#ff6034" round @click="sendText">发送</van-button>
-      <van-button size="small" plain round @click="showActions = true">+</van-button>
+      <button class="im-tool" type="button" aria-label="发送图片" @click="pickImage">
+        <van-icon name="photograph" size="22" />
+      </button>
+      <van-field v-model="text" class="im-field" placeholder="说点什么..." @keyup.enter="sendText" />
+      <van-button size="small" type="primary" round @click="sendText">发送</van-button>
+      <button class="im-tool im-tool--more" type="button" aria-label="更多操作" @click="showActions = true">
+        <van-icon name="plus" size="18" />
+      </button>
     </div>
 
     <!-- 隐藏的上传控件 -->
@@ -86,7 +99,7 @@
           <div class="tf-label">凭证照片</div>
           <van-uploader v-model="form.files" multiple :max-count="6" accept="image/*" />
         </div>
-        <van-button block round type="primary" color="#ff6034" style="margin-top: 16px"
+        <van-button block round type="primary" class="tf-submit"
           :loading="submitting" @click="submitTicket">提交工单</van-button>
       </div>
     </van-popup>
@@ -265,17 +278,21 @@ onUnmounted(() => {
 .im-page {
   display: flex;
   flex-direction: column;
+  /* 输入区在流内固定占用底部空间，消息区 flex:1 滚动，输入框不会被挤出屏幕 */
   height: 100vh;
+  background: var(--wm-bg-page);
 }
+
 .im-body {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 12px;
-  background: #f5f5f5;
+  padding: var(--wm-space-3);
 }
+
 .msg {
   display: flex;
-  margin-bottom: 12px;
+  margin-bottom: var(--wm-space-3);
 }
 .msg.mine {
   justify-content: flex-end;
@@ -283,126 +300,235 @@ onUnmounted(() => {
 .msg.other {
   justify-content: flex-start;
 }
+
+/* ---------------- 系统提示 ---------------- */
 .sys-tip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wm-space-1);
   margin: 0 auto;
-  font-size: 12px;
-  color: #999;
-  background: #e6e6e6;
-  padding: 2px 10px;
-  border-radius: 10px;
+  padding: var(--wm-space-1) var(--wm-space-3);
+  border-radius: var(--wm-radius-full);
+  background: var(--wm-border);
+  color: var(--wm-text-3);
+  font-size: var(--wm-font-sm);
+  line-height: var(--wm-leading-normal);
 }
+
+/* ---------------- 气泡 ---------------- */
 .bubble {
   max-width: 72%;
-  padding: 9px 12px;
-  border-radius: 10px;
-  font-size: 14px;
-  line-height: 1.5;
+  padding: var(--wm-space-3) var(--wm-space-4);
+  border-radius: var(--wm-radius-lg);
+  font-size: var(--wm-font-md);
+  line-height: var(--wm-leading-normal);
   word-break: break-all;
 }
 .msg.mine .bubble {
-  background: #ff6034;
+  background: var(--wm-primary);
   color: #fff;
+  border-bottom-right-radius: var(--wm-radius-sm);
 }
 .msg.other .bubble {
-  background: #fff;
-  color: #333;
+  background: var(--wm-bg-page);
+  color: var(--wm-text-2);
+  border-bottom-left-radius: var(--wm-radius-sm);
 }
+
 .img-wrap {
   display: flex;
-  gap: 6px;
+  gap: var(--wm-space-2);
   flex-wrap: wrap;
 }
+
+/* ---------------- 订单卡片 ---------------- */
 .order-card {
   width: 78%;
-  background: #fff;
-  border-radius: 8px;
-  padding: 10px 12px;
-  font-size: 13px;
+  padding: var(--wm-space-4);
+  background: var(--wm-bg-card);
+  border-radius: var(--wm-radius-lg);
+  box-shadow: var(--wm-shadow-1);
+  font-size: var(--wm-font-sm);
+  cursor: pointer;
 }
 .oc-head {
   display: flex;
+  align-items: center;
   justify-content: space-between;
+  gap: var(--wm-space-2);
+  margin-bottom: var(--wm-space-2);
+  font-size: var(--wm-font-md);
   font-weight: 600;
-  margin-bottom: 6px;
+}
+.oc-shop {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wm-space-1);
+  min-width: 0;
+  color: var(--wm-text-1);
+}
+.oc-shop-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .oc-status {
-  color: #ff6034;
+  flex-shrink: 0;
+  color: var(--wm-primary);
 }
 .oc-item {
   display: flex;
   justify-content: space-between;
-  color: #666;
-  margin-bottom: 2px;
+  gap: var(--wm-space-2);
+  margin-bottom: var(--wm-space-1);
+  color: var(--wm-text-2);
+}
+.oc-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.oc-qty {
+  flex-shrink: 0;
+  color: var(--wm-text-3);
 }
 .oc-foot {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  border-top: 1px solid #f0f0f0;
-  margin-top: 6px;
-  padding-top: 6px;
+  gap: var(--wm-space-2);
+  margin-top: var(--wm-space-2);
+  padding-top: var(--wm-space-2);
+  border-top: 1px solid var(--wm-border);
 }
 .oc-no {
-  color: #999;
-  font-size: 12px;
+  font-size: var(--wm-font-xs);
+  color: var(--wm-text-4);
 }
 .oc-amount {
-  color: #ff6034;
+  color: var(--wm-primary);
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
+
+/* ---------------- 工单卡片 ---------------- */
 .ticket-card {
   width: 82%;
-  background: #fff;
-  border-radius: 8px;
-  padding: 10px 12px;
-  font-size: 13px;
+  padding: var(--wm-space-4);
+  background: var(--wm-bg-card);
+  border-radius: var(--wm-radius-lg);
+  box-shadow: var(--wm-shadow-1);
+  font-size: var(--wm-font-sm);
 }
 .tc-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--wm-space-2);
+  font-size: var(--wm-font-md);
   font-weight: 600;
 }
+.tc-type {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wm-space-1);
+  color: var(--wm-text-1);
+}
 .tc-amount {
-  color: #ff6034;
+  margin-right: auto;
+  color: var(--wm-primary);
+  font-variant-numeric: tabular-nums;
 }
 .tc-reason {
-  color: #666;
-  margin: 6px 0;
-  line-height: 1.5;
+  margin: var(--wm-space-2) 0;
+  color: var(--wm-text-2);
+  line-height: var(--wm-leading-normal);
 }
 .tc-images {
   display: flex;
-  gap: 6px;
+  gap: var(--wm-space-2);
   flex-wrap: wrap;
 }
 .tc-reply {
-  margin-top: 6px;
-  padding-top: 6px;
-  border-top: 1px dashed #eee;
-  color: #333;
+  margin-top: var(--wm-space-2);
+  padding-top: var(--wm-space-2);
+  border-top: 1px dashed var(--wm-border);
+  color: var(--wm-text-3);
+  line-height: var(--wm-leading-normal);
 }
+
+/* ---------------- 输入区 ---------------- */
 .im-input {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  background: #fff;
-  border-top: 1px solid #eee;
+  gap: var(--wm-space-2);
+  padding: var(--wm-space-2) var(--wm-space-3);
+  padding-bottom: calc(var(--wm-space-2) + env(safe-area-inset-bottom));
+  background: var(--wm-bg-card);
+  border-top: 1px solid var(--wm-border);
 }
+
+.im-tool {
+  flex: 0 0 var(--wm-tap-min);
+  width: var(--wm-tap-min);
+  height: var(--wm-tap-min);
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--wm-radius-md);
+  background: transparent;
+  color: var(--wm-text-3);
+  cursor: pointer;
+}
+.im-tool:active {
+  background: var(--wm-bg-page);
+}
+.im-tool--more {
+  color: var(--wm-primary);
+  border: 1px solid var(--wm-primary-200);
+}
+
+.im-input :deep(.van-field) {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--wm-tap-min);
+  padding: var(--wm-space-1) var(--wm-space-3);
+  border-radius: var(--wm-radius-full);
+  background: var(--wm-bg-page);
+  font-size: var(--wm-font-md);
+}
+
+.im-input :deep(.van-button) {
+  flex-shrink: 0;
+  min-height: var(--wm-tap-min);
+  padding: 0 var(--wm-space-4);
+}
+
+/* ---------------- 工单表单 ---------------- */
 .ticket-form {
-  padding: 16px;
+  padding: var(--wm-space-4);
+  padding-bottom: calc(var(--wm-space-4) + env(safe-area-inset-bottom));
+  height: 100%;
+  overflow-y: auto;
+  background: var(--wm-bg-card);
 }
 .tf-title {
-  font-size: 16px;
+  margin-bottom: var(--wm-space-4);
+  font-size: var(--wm-font-lg);
   font-weight: 600;
-  margin-bottom: 8px;
+  color: var(--wm-text-1);
 }
 .tf-images {
-  margin-top: 12px;
+  margin-top: var(--wm-space-3);
 }
 .tf-label {
-  font-size: 13px;
-  color: #666;
-  margin-bottom: 6px;
+  margin-bottom: var(--wm-space-2);
+  font-size: var(--wm-font-md);
+  color: var(--wm-text-2);
+}
+.tf-submit {
+  margin-top: var(--wm-space-4);
+  min-height: var(--wm-tap-min);
 }
 </style>

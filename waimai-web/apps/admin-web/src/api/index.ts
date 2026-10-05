@@ -1,7 +1,7 @@
 import { get, put, del, post } from '@waimai/shared';
 
-export const apiLogin = (phone: string, password: string) =>
-  post<{ accessToken: string }>('/auth/login', { phone, password });
+export const apiLogin = (phone: string, password: string, remember = false) =>
+  post<{ accessToken: string; refreshToken: string }>('/auth/login', { phone, password, remember });
 
 export const apiDashboard = () => get('/admin/dashboard');
 

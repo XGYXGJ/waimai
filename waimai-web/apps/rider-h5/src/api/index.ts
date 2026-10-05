@@ -1,7 +1,7 @@
 import { get, post } from '@waimai/shared';
 
-export const apiLogin = (phone: string, password: string) =>
-  post<{ accessToken: string }>('/auth/login', { phone, password });
+export const apiLogin = (phone: string, password: string, remember = false) =>
+  post<{ accessToken: string; refreshToken: string }>('/auth/login', { phone, password, remember });
 
 export const apiRegister = (data: { phone: string; password: string; nickname?: string; role: string }) =>
   post('/auth/register', data);

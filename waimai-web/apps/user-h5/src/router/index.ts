@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
-import { getToken, isTokenExpired, clearAuth } from '@waimai/shared';
+import { hasValidSession, clearAuth } from '@waimai/shared';
 
 const routes = [
   { path: '/login', component: () => import('@/pages/Login.vue') },
@@ -32,8 +32,9 @@ const publicPaths = ['/login'];
 
 router.beforeEach((to) => {
   if (publicPaths.includes(to.path)) return true;
-  const token = getToken();
-  if (!token || isTokenExpired(token)) {
+  // 只判断 access token 会在 2 小时后把 7/30 天的 refresh token 一并 clearAuth() 销毁，
+  // 静默续期就永远没机会执行 → 这里改用「会话是否仍可用」
+  if (!hasValidSession()) {
     clearAuth();
     return { path: '/login', query: { redirect: to.fullPath } };
   }
