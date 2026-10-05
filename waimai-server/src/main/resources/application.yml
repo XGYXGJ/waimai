@@ -28,3 +28,16 @@ waimai:
   frontend:
     # 后端启动后自动拉起四端前端 dev server，后端关闭时自动停止（Windows/macOS/Linux 通用）
     auto-start: true
+  deps:
+    # 后端启动后自动拉起 docker 依赖（Redis/RabbitMQ/AI 服务），后端关闭时一起停止，
+    # 这样在 IDEA 里启动 WaimaiApplication 就等于启动全部功能。需要 Docker Desktop 已启动。
+    # 生产环境（server 跑在容器里）请置 false，容器编排交给 docker compose / K8s
+    auto-start: true
+    # 需要接管的 compose 服务名；MySQL 是本机 Windows 服务（3306），不在这里管理
+    services: redis,rabbitmq,ai
+    # 启动命令与 AI 健康检查的超时（秒），首次构建镜像会更久
+    start-timeout-seconds: 120
+    # 关闭时 docker compose stop 的超时（秒）
+    stop-timeout-seconds: 60
+    # 关闭后端时是否一起停掉这些容器；想保留依赖常驻可置 false
+    stop-on-shutdown: true

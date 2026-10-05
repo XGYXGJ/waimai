@@ -4,9 +4,13 @@ import com.waimai.common.result.R;
 import com.waimai.common.result.ResultCode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @Slf4j
 @RestControllerAdvice
@@ -36,6 +40,19 @@ public class GlobalExceptionHandler {
         String msg = e.getBindingResult().getFieldErrors().isEmpty() ? "参数错误"
                 : e.getBindingResult().getFieldErrors().get(0).getDefaultMessage();
         return R.fail(ResultCode.PARAM_ERROR, msg);
+    }
+
+    /**
+     * 404：请求了一个不存在的地址或静态资源（例如 /uploads/xxx.jpg 图片已被删除）。
+     * Spring 6.1 起，找不到静态资源抛 NoResourceFoundException、找不到处理器抛
+     * NoHandlerFoundException；若落到下面的 Exception 兜底，会返回 HTTP 200 + code 500，
+     * 前端和排错的人都会被状态码误导。这里显式返回 HTTP 404，JSON 结构与其他接口保持一致。
+     */
+    @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
+    public ResponseEntity<R<Void>> handleNotFound(Exception e) {
+        log.warn("not found: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(R.fail(ResultCode.NOT_FOUND, "资源不存在"));
     }
 
     @ExceptionHandler(Exception.class)

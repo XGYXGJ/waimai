@@ -23,25 +23,44 @@ waimai/
 
 ## 快速启动（开发模式）
 
-### 1. 中间件
+### 1. 中间件（Redis / RabbitMQ / AI 由后端自动启停）
+只要本机有可用的 MySQL（开发环境连 `localhost:3306`，见 `application-dev.yml`）并已导入建表脚本，
+Redis、RabbitMQ、AI 服务**都不用手动启动**：后端启动时会自动 `docker compose up -d --no-deps` 拉起这三个容器，
+后端关闭时自动 `docker compose stop` 停掉（前提是本机 Docker Desktop 已在运行）。
+
+如需用容器里的 MySQL，或想手动准备中间件：
 ```bash
 docker compose up -d mysql redis rabbitmq
 # 等待 mysql 就绪后导入建表
 docker exec -i waimai-mysql mysql -uroot -pwaimai123 waimai < sql/waimai.sql
 ```
 
-### 2. 后端（一键启动后端 + 四端前端）
+### 2. 后端（一键启动：后端 + docker 依赖 + 四端前端）
 用 IDE 运行 `WaimaiApplication`（需 JDK 17+，会自动建表所需初始数据），或：
 ```bash
 cd waimai-server && mvn spring-boot:run   # 本机需 Maven
 ```
 
-**后端启动完成后会自动拉起四端前端 Vite dev server，关闭后端（含 IDEA 的 Stop 按钮）时自动停止四端**，
-无需手动执行下面的第 4 步。控制开关见 `application.yml` 的 `waimai.frontend.auto-start`（生产环境默认关闭）。
+**在 IDEA 里 Run 一次 `WaimaiApplication`，整套系统就都起来了**：后端会依次
+① 自动拉起 Redis / RabbitMQ / AI 三个 docker 容器，并等到 AI 的 `/health` 就绪；
+② 自动拉起四端前端 Vite dev server（5173~5176）。
+点 Stop 关闭后端时，四端前端与这三个容器会一起被停掉 —— 无需手动执行下面的第 3、4 步。
+
+- 前端自动启停开关：`application.yml` 的 `waimai.frontend.auto-start`
+- docker 依赖自动启停开关：`application.yml` 的 `waimai.deps.*`（`auto-start` / `services` /
+  `compose-file` / `ai-health-url` / `start-timeout-seconds` / `stop-timeout-seconds` / `stop-on-shutdown`）；
+  生产部署（后端跑在容器里）应把 `waimai.deps.auto-start` 与 `waimai.frontend.auto-start` 都置为 `false`。
+- 注意：IDEA 用 **Force Kill**（而不是 Stop）结束进程时 JVM 不会执行关闭钩子，容器不会被自动停掉，
+  需要手动 `docker compose stop redis rabbitmq ai`。
 
 首次启动自动创建演示数据（详见下方账号表）。
 
-### 3. AI 服务
+### 3. AI 服务（默认由后端自动启动，通常无需手动执行）
+后端启动时会自动 `docker compose up -d --no-deps ai`，并轮询 `http://localhost:8000/health` 直到就绪
+（默认最多等 120 秒，超时只在日志里告警，不影响主业务）。
+
+只有在**本地用 Python 直接调试 AI**（改 `waimai-ai` 代码想热重载）时才需要手动跑：先把
+`application.yml` 的 `waimai.deps.auto-start` 置为 `false`，再执行
 ```bash
 cd waimai-ai
 pip install -r requirements.txt
