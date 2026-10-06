@@ -51,7 +51,11 @@
         </div>
       </article>
 
-      <van-empty v-if="finished && !orders.length" description="暂无订单" />
+      <van-empty v-if="finished && !orders.length && !loadFailed" description="暂无订单" />
+      <div v-if="loadFailed" class="load-failed">
+        <van-empty :description="failMsg" />
+        <van-button type="primary" round size="small" @click="retry">重新加载</van-button>
+      </div>
     </van-list>
   </div>
 </template>
@@ -71,10 +75,14 @@ const tabs = [
   { key: 'DELIVERING', label: '进行中' },
   { key: 'DELIVERED', label: '待评价' },
 ];
+/** 与 apiMyOrders 的默认 size 保持一致：判断「还有没有下一页」要用它 */
+const PAGE_SIZE = 10;
 const activeTab = ref('');
 const orders = ref<any[]>([]);
 const loading = ref(false);
 const finished = ref(false);
+const loadFailed = ref(false);
+const failMsg = ref('加载失败');
 const page = ref(1);
 
 // 切换 tab 时必须把分页状态重置。之前只改 activeTab 不重新加载，
@@ -84,18 +92,26 @@ watch(activeTab, () => {
   page.value = 1;
   finished.value = false;
   loading.value = false;
+  loadFailed.value = false;
 });
 
-const statusText: Record<string, string> = {
-  PENDING_PAYMENT: '待支付',
-  PAID: '待接单',
-  ACCEPTED: '备餐中',
-  WAITING_PICKUP: '待取餐',
-  DELIVERING: '配送中',
-  DELIVERED: '已送达',
-  CANCELLED: '已取消',
-  REFUNDED: '已退款',
-};
+/** 订单状态文案。必须是函数：模板按 statusText(o.status) 调用。
+ *  定义成对象字面量时，v-for 一渲染就会抛 "statusText is not a function"，
+ *  列表直接刷不出来（且会连带损坏 vdom）。 */
+function statusText(s?: string): string {
+  return (
+    {
+      PENDING_PAYMENT: '待支付',
+      PAID: '待接单',
+      ACCEPTED: '备餐中',
+      WAITING_PICKUP: '待取餐',
+      DELIVERING: '配送中',
+      DELIVERED: '已送达',
+      CANCELLED: '已取消',
+      REFUNDED: '已退款',
+    }[s || ''] || s || ''
+  );
+}
 
 function goDetail(id: number) {
   router.push(`/orders/${id}`);
@@ -111,16 +127,39 @@ function goReview(id: number) {
 }
 
 async function load() {
+  // 只能挡 finished。
+  // 之前还挡了 loading —— 但 van-list 的触发顺序是「先把 loading 置 true → 同步 emit
+  // update:loading → 再 emit load」，到我们的 handler 执行时 loading 已经是 true，
+  // 于是每次都在第一行 return：列表永远空、finished 永远 false（连空态都不显示）、
+  // 转圈停不下来。必须靠 van-list 自身的 loading prop 来防重入，不能自己读它。
+  if (finished.value) return;
   loading.value = true;
   try {
     const data: any = await apiMyOrders(activeTab.value, page.value);
-    const records = data.records || [];
+    const records = data?.records ?? [];
     orders.value = page.value === 1 ? records : [...orders.value, ...records];
-    finished.value = records.length < 10;
     page.value++;
+    finished.value = records.length < PAGE_SIZE;
+  } catch (e: any) {
+    // 这里必须 catch：@waimai/shared 的响应拦截器对一切失败都 reject，
+    // 而 van-list 看到 loading=false 会自动再触发一次 @load —— 不接住异常就会变成
+    // 「请求失败 → 无限重试 → 页面永远转圈」。失败时标记 finished 断开重试，并给出重试入口。
+    finished.value = true;
+    loadFailed.value = true;
+    failMsg.value = e?.message || '加载失败，请检查网络或后端是否启动';
   } finally {
     loading.value = false;
   }
+}
+
+/** 手动重试：重新打开自动加载并从第一页拉 */
+function retry() {
+  loadFailed.value = false;
+  failMsg.value = '加载失败';
+  orders.value = [];
+  page.value = 1;
+  finished.value = false;
+  load();
 }
 </script>
 
@@ -311,5 +350,18 @@ async function load() {
   min-height: var(--wm-tap-min);
   padding: 0 var(--wm-space-4);
   font-size: var(--wm-font-md);
+}
+
+/* ---------------- 加载失败 ---------------- */
+.load-failed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--wm-space-2);
+  padding: var(--wm-space-4) 0;
+}
+
+.load-failed :deep(.van-empty) {
+  padding: var(--wm-space-3) 0;
 }
 </style>

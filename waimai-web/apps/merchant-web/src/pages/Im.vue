@@ -83,17 +83,31 @@
                   <!-- 文本 -->
                   <div v-else class="bubble">
                     <div class="bubble-role" v-if="m.senderRole === 'SYSTEM'">系统</div>
+                    <div class="bubble-role" v-else-if="m.senderRole === 'USER'">顾客</div>
+                    <div class="bubble-role rider" v-else-if="m.senderRole === 'RIDER'">骑手</div>
                     {{ m.content }}
                   </div>
                 </div>
               </div>
 
               <div class="cb-input">
-                <el-input v-model="text" placeholder="回复顾客..." @keyup.enter="sendText" />
+                <el-input v-model="text" placeholder="回复顾客/骑手..." @keyup.enter="sendText" />
                 <el-upload :show-file-list="false" :http-request="uploadImage" accept="image/*">
                   <el-button>图片</el-button>
                 </el-upload>
+                <!-- 把当前工单卡片再发一次，等于在频道里「答复工单」 -->
+                <el-button
+                  v-if="currentSession?.chatOpen !== false"
+                  :disabled="!hasTicket"
+                  title="把最近一张工单卡片发到频道里"
+                  @click="sendTicketCard"
+                >
+                  答复工单
+                </el-button>
                 <el-button type="primary" @click="sendText" :loading="sending">发送</el-button>
+              </div>
+              <div class="cb-hint">
+                本频道由顾客、商家、骑手共用；送达后 30 分钟内可沟通
               </div>
             </template>
             <el-empty v-else description="选择左侧会话开始沟通" />
@@ -167,6 +181,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { ElMessage } from 'element-plus';
+import { WsClient } from '@waimai/shared';
 import {
   apiImSessions, apiImMessages, apiImSend, apiImTickets, apiImHandleTicket, apiUpload,
 } from '@/api';
@@ -181,6 +196,9 @@ const lastId = ref(0);
 const sending = ref(false);
 const bodyRef = ref<HTMLElement>();
 
+let msgInFlight = false;   // 消息请求锁，防 WS 与轮询重复拉取
+let loadToken = 0;         // 会话令牌，快速切换时丢弃过期响应
+
 const tickets = ref<any[]>([]);
 const ticketStatus = ref('');
 const showHandle = ref(false);
@@ -192,6 +210,13 @@ const handleTicketId = ref<number | null>(null);
 const pendingCount = computed(
   () => tickets.value.filter((t) => t.status === 'PENDING').length
 );
+
+/** 当前会话里是否已有工单（决定「答复工单」按钮可不可点） */
+const hasTicket = computed(() =>
+  messages.value.some((m) => m.msgType === 'TICKET')
+);
+/** 服务端返回的会话快照里带 chatOpen / 骑手信息 */
+const currentSession = computed(() => current.value);
 const handleTitle = computed(() =>
   ({ APPROVED: '同意工单', REJECTED: '驳回工单', PROCESSING: '标记处理中', CLOSED: '关闭工单' } as any)[handleAction.value]
 );
@@ -217,18 +242,45 @@ async function loadSessions() {
   }
 }
 
+/**
+ * 拉取当前会话的消息。
+ *
+ * 两处必须防：
+ * 1) 请求锁 —— WS 推送与 3 秒轮询、以及发完消息后的主动刷新可能重叠，
+ *    两次都读到同一个 lastId 就会 push 同一批消息（气泡重复）。
+ * 2) 会话令牌 —— 快速点 A→B 时，A 的响应可能后到并覆盖 B 的内容，
+ *    且 lastId 被写成 A 的最大 id，导致 B 的历史消息从此永远拉不到。
+ */
 async function loadMessages(initial = false) {
   if (!currentId.value) return;
+  if (msgInFlight) return;
+  const requestedId = currentId.value;
+  const token = ++loadToken;
+  msgInFlight = true;
   try {
-    const data: any = await apiImMessages(currentId.value, initial ? 0 : lastId.value);
+    const data: any = await apiImMessages(requestedId, initial ? 0 : lastId.value);
+    if (token !== loadToken || currentId.value !== requestedId) return;   // 已切走，丢弃
     current.value = data?.session || current.value;
-    const records = data?.records || [];
-    if (initial) messages.value = records;
-    else if (records.length) messages.value.push(...records);
-    lastId.value = data?.lastId || lastId.value;
-    if (initial || records.length) scrollBottom();
+    const records: any[] = data?.records || [];
+    if (initial) {
+      messages.value = records;
+      lastId.value = data?.lastId || 0;
+      scrollBottom();
+      return;
+    }
+    if (records.length) {
+      const seen = new Set(messages.value.map((m: any) => m.id));
+      const fresh = records.filter((m: any) => !seen.has(m.id));
+      if (fresh.length) {
+        messages.value.push(...fresh);
+        lastId.value = data?.lastId || fresh[fresh.length - 1].id;
+        scrollBottom();
+      }
+    }
   } catch {
     /* 轮询失败静默 */
+  } finally {
+    if (token === loadToken) msgInFlight = false;
   }
 }
 
@@ -253,6 +305,19 @@ async function sendText() {
     ElMessage.error(e.message || '发送失败');
   } finally {
     sending.value = false;
+  }
+}
+
+/** 商家答复工单：把最近一张工单卡片发进频道，三方都能看到处理结果 */
+async function sendTicketCard() {
+  if (!currentId.value) return;
+  try {
+    await apiImSend(currentId.value, { msgType: 'TICKET' });
+    await loadMessages();
+    loadSessions();
+    ElMessage.success('工单卡片已发送到频道');
+  } catch (e: any) {
+    ElMessage.error(e.message || '发送失败');
   }
 }
 
@@ -311,9 +376,17 @@ function gotoSession(row: any) {
 }
 
 let timer: any = null;
+let ws: WsClient | null = null;
 onMounted(async () => {
   await loadSessions();
   await loadTickets();
+  // 三方频道：WS 收到新消息信号就立刻增量拉取；3 秒轮询保留兜底
+  ws = new WsClient();
+  ws.connect();
+  ws.on('IM_MESSAGE', () => {
+    if (currentId.value) loadMessages();
+    loadSessions();
+  });
   timer = setInterval(() => {
     if (currentId.value) loadMessages();
     if (tab.value === 'ticket') loadTickets();
@@ -321,6 +394,7 @@ onMounted(async () => {
 });
 onUnmounted(() => {
   if (timer) clearInterval(timer);
+  ws?.close();
 });
 </script>
 
@@ -329,6 +403,14 @@ onUnmounted(() => {
   height: calc(100vh - 140px);
   display: flex;
   flex-direction: column;
+}
+.bubble-role.rider {
+  color: #e6a23c;
+}
+.cb-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #999;
 }
 .chat-layout {
   display: flex;

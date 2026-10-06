@@ -54,7 +54,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick } from 'vue';
 import * as echarts from 'echarts';
 import { apiDashboard } from '@/api';
 
@@ -62,10 +62,13 @@ const stats = ref([
   { label: '用户总数', value: '0' },
   { label: '商户总数', value: '0' },
   { label: '订单总数', value: '0' },
-  { label: '骑手在线', value: '0' },
+  { label: '骑手上线', value: '0' },
+  { label: '空闲 / 配送中', value: '0 / 0' },
 ]);
 const gmv = ref<any>({});
 const trendRef = ref<any>(null);
+/** ECharts 实例句柄：重复进入要 dispose，卸载也要 dispose */
+let chart: any = null;
 /** 收入构成三行：平台 / 商家 / 骑手 */
 const incomeRows = ref<any[]>([]);
 
@@ -95,12 +98,15 @@ onMounted(async () => {
     stats.value[1].value = String(data.merchantCount || 0);
     stats.value[2].value = String(data.orderCount || 0);
     stats.value[3].value = String(data.riderOnline || 0);
+    stats.value[4].value = `${data.riderIdle || 0} / ${data.riderBusy || 0}`;
     gmv.value = data.gmv || {};
     incomeRows.value = buildIncomeRows(data.income);
 
     await nextTick();
     if (trendRef.value) {
-      const chart = echarts.init(trendRef.value);
+      // 重复进入会 init 多次：必须先 dispose 上一个实例，否则同一 div 上叠了多个实例
+      if (chart) chart.dispose();
+      chart = echarts.init(trendRef.value);
       const dates = (data.orderTrend || []).map((t: any) => t.date.slice(5));
       const counts = (data.orderTrend || []).map((t: any) => t.count);
       chart.setOption({
@@ -109,8 +115,20 @@ onMounted(async () => {
         yAxis: { type: 'value' },
         series: [{ type: 'line', data: counts, smooth: true, areaStyle: { opacity: 0.2 }, itemStyle: { color: '#ff6034' } }],
       });
+      // 窗口缩放时图表不会自适应，必须手动 resize
+      window.addEventListener('resize', onResize);
     }
   } catch {}
+});
+
+function onResize() {
+  chart?.resize();
+}
+
+onUnmounted(() => {
+  window.removeEventListener('resize', onResize);
+  chart?.dispose();
+  chart = null;
 });
 </script>
 

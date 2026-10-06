@@ -12,9 +12,20 @@ export class WsClient {
   private ws: WebSocket | null = null;
   private handlers = new Map<string, Handler[]>();
   private heartbeatTimer: number | null = null;
+  private reconnectTimer: number | null = null;
   private reconnectAttempts = 0;
   private maxReconnect = 5;
   private url: string;
+  /**
+   * 是否由 close() 主动关闭。
+   *
+   * 没有这个标志时 close() 会自杀式重连：close() 把 this.ws 置空并调用 socket.close()，
+   * socket 随后异步触发 onclose，onclose 看到 reconnectAttempts(0) < maxReconnect(5)
+   * 就 setTimeout(() => this.connect()) —— 而此时 this.ws 已是 null，connect() 会
+   * 新建一条连接，onopen 又 startHeartbeat()。结果：组件卸载后仍留下一条活连接和一个
+   * 30 秒心跳定时器，反复进出页面就会累积多个孤儿连接（每个都持有已卸载组件的闭包）。
+   */
+  private closedByUser = false;
 
   constructor(url?: string) {
     const base = (import.meta.env.VITE_WS_BASE as string) || '';
@@ -24,6 +35,7 @@ export class WsClient {
   }
 
   connect() {
+    if (this.closedByUser) return;   // close() 之后不再复活
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
       return;
     }
@@ -40,12 +52,24 @@ export class WsClient {
     };
     this.ws.onclose = () => {
       this.stopHeartbeat();
+      if (this.closedByUser) return;
       if (this.reconnectAttempts < this.maxReconnect) {
         this.reconnectAttempts++;
-        setTimeout(() => this.connect(), 1000 * this.reconnectAttempts);
+        this.clearReconnect();
+        this.reconnectTimer = window.setTimeout(() => {
+          this.reconnectTimer = null;
+          this.connect();
+        }, 1000 * this.reconnectAttempts);
       }
     };
     this.ws.onerror = () => this.ws?.close();
+  }
+
+  /** 重新启用自动重连（同一个实例复用时需要） */
+  reopen() {
+    this.closedByUser = false;
+    this.reconnectAttempts = 0;
+    this.connect();
   }
 
   on(type: string, handler: Handler) {
@@ -91,9 +115,29 @@ export class WsClient {
     }
   }
 
+  private clearReconnect() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+  }
+
+  /** 彻底关闭：停心跳、取消重连、断开连接（不会自动复活） */
   close() {
+    this.closedByUser = true;
     this.stopHeartbeat();
-    this.ws?.close();
+    this.clearReconnect();
+    const sock = this.ws;
     this.ws = null;
+    // 先摘掉 onclose，避免 close() 触发的那次回调再排一次重连
+    if (sock) {
+      sock.onclose = null;
+      sock.onerror = null;
+      sock.onmessage = null;
+      sock.onopen = null;
+      try {
+        sock.close();
+      } catch {}
+    }
   }
 }

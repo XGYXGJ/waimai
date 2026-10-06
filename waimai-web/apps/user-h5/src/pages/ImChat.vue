@@ -2,6 +2,21 @@
   <div class="im-page">
     <van-nav-bar :title="title" left-arrow @click-left="$router.back()" />
 
+    <!-- 三方成员：用户 / 商家 / 骑手共用同一个频道 -->
+    <div class="im-party">
+      <span class="pdot"></span>
+      <span class="ptext">{{ partyText }}</span>
+    </div>
+
+    <!-- 送达后 30 分钟窗口：到点后禁言（服务端也会拦，这里只是提前告知） -->
+    <van-notice-bar
+      v-if="session && session.chatOpen === false"
+      left-icon="warning-o"
+      color="#ed6a0c"
+      background="#fffbe8"
+      text="沟通已关闭：订单送达后 30 分钟内可反馈问题，超时请联系客服"
+    />
+
     <!-- 消息流：自己发的品牌色气泡，对方用页面底色气泡 -->
     <div class="im-body" ref="bodyRef">
       <div v-for="m in messages" :key="m.id" :class="['msg', m.senderRole === 'USER' ? 'mine' : 'other']">
@@ -11,6 +26,9 @@
           <span v-if="m.msgType === 'TICKET'">工单动态</span>
           <span v-else>{{ m.content }}</span>
         </div>
+
+        <!-- 对方身份标签：商家 / 骑手 -->
+        <div v-else-if="m.senderRole !== 'USER'" class="who">{{ roleLabel(m.senderRole) }}</div>
 
         <!-- 订单卡片 -->
         <div v-else-if="m.msgType === 'ORDER'" class="order-card" @click="goOrder(m.payload?.orderId)">
@@ -69,7 +87,7 @@
     </div>
 
     <!-- 输入区：固定在底部，带安全区留白，保证不被 tabbar / 手势条挡住 -->
-    <div class="im-input">
+    <div class="im-input" v-if="session && session.chatOpen !== false">
       <button class="im-tool" type="button" aria-label="发送图片" @click="pickImage">
         <van-icon name="photograph" size="22" />
       </button>
@@ -78,6 +96,10 @@
       <button class="im-tool im-tool--more" type="button" aria-label="更多操作" @click="showActions = true">
         <van-icon name="plus" size="18" />
       </button>
+    </div>
+    <!-- 送达 30 分钟后：只读 -->
+    <div v-else class="im-input im-input--closed">
+      <span>沟通已关闭，如需帮助请联系客服</span>
     </div>
 
     <!-- 隐藏的上传控件 -->
@@ -113,6 +135,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { showToast, showImagePreview } from 'vant';
 import { apiImMessages, apiImSend, apiImTicketCreate, apiUpload } from '@/api';
+import { WsClient } from '@waimai/shared';
 
 const route = useRoute();
 const router = useRouter();
@@ -120,6 +143,7 @@ const sessionId = Number(route.params.id);
 
 const messages = ref<any[]>([]);
 const title = ref('联系商家');
+const session = ref<any>(null);
 const text = ref('');
 const lastId = ref(0);
 const bodyRef = ref<HTMLElement>();
@@ -154,6 +178,18 @@ const orderStatusText = (s?: string) => orderStatusMap[s || ''] || s || '';
 const ticketTagType = (s?: string) =>
   s === 'APPROVED' ? 'success' : s === 'REJECTED' || s === 'CLOSED' ? 'danger' : 'primary';
 
+function roleLabel(role: string) {
+  return role === 'MERCHANT' ? '商家' : role === 'RIDER' ? '骑手' : role;
+}
+
+/** 本单频道里的三方 */
+const partyText = computed(() => {
+  const parts: string[] = [];
+  if (session.value?.merchantName) parts.push(session.value.merchantName);
+  parts.push(session.value?.riderName ? `骑手 ${session.value.riderName}` : '待接单');
+  return parts.join(' · ');
+});
+
 function preview(images: string[], index: number) {
   showImagePreview({ images, startPosition: index });
 }
@@ -166,18 +202,41 @@ async function scrollBottom() {
   if (bodyRef.value) bodyRef.value.scrollTop = bodyRef.value.scrollHeight;
 }
 
-/** 增量拉取：只取 lastId 之后的新消息 */
+/**
+ * 增量拉取：只取 lastId 之后的新消息。
+ *
+ * 加锁 + 按 id 去重：WS 推送与 3 秒轮询、以及发完消息后的主动刷新可能重叠，
+ * 两次都读到同一个 lastId 就会把同一批消息 push 两次（气泡重复）。
+ */
 async function loadNew(initial = false) {
+  if (imInFlight) return;
+  imInFlight = true;
   try {
     const data: any = await apiImMessages(sessionId, initial ? 0 : lastId.value);
-    if (data?.session?.merchantName) title.value = data.session.merchantName;
-    const records = data?.records || [];
-    if (initial) messages.value = records;
-    else if (records.length) messages.value.push(...records);
-    lastId.value = data?.lastId || lastId.value;
-    if (records.length || initial) scrollBottom();
+    if (data?.session) {
+      session.value = { ...session.value, ...data.session };
+      if (data.session.merchantName) title.value = data.session.merchantName;
+    }
+    const records: any[] = data?.records || [];
+    if (initial) {
+      messages.value = records;
+      lastId.value = data?.lastId || lastId.value;
+      scrollBottom();
+      return;
+    }
+    if (records.length) {
+      const seen = new Set(messages.value.map((m: any) => m.id));
+      const fresh = records.filter((m: any) => !seen.has(m.id));
+      if (fresh.length) {
+        messages.value.push(...fresh);
+        lastId.value = data?.lastId || fresh[fresh.length - 1].id;
+        scrollBottom();
+      }
+    }
   } catch (e: any) {
     if (initial) showToast(e.message || '加载失败');
+  } finally {
+    imInFlight = false;
   }
 }
 
@@ -265,12 +324,22 @@ async function submitTicket() {
 }
 
 let timer: any = null;
+let ws: WsClient | null = null;
+let imInFlight = false;   // 增量请求锁，防止 WS 与轮询重复拉同一批消息
 onMounted(async () => {
   await loadNew(true);
+  // 三方频道：WS 收到「有新消息」信号就立刻增量拉一次（内容仍走接口，避免两套渲染逻辑）；
+  // 3 秒轮询保留作兜底（WS 断线时仍能收到消息）。
+  ws = new WsClient();
+  ws.connect();
+  ws.on('IM_MESSAGE', (msg) => {
+    if (msg.sessionId === sessionId) loadNew(false);
+  });
   timer = setInterval(() => loadNew(false), 3000);
 });
 onUnmounted(() => {
   if (timer) clearInterval(timer);
+  ws?.close();
 });
 </script>
 
@@ -283,11 +352,49 @@ onUnmounted(() => {
   background: var(--wm-bg-page);
 }
 
+/* ---------------- 三方频道标识 ---------------- */
+.im-party {
+  display: flex;
+  align-items: center;
+  gap: var(--wm-space-1);
+  padding: 6px var(--wm-space-4);
+  font-size: var(--wm-font-sm);
+  color: var(--wm-text-2);
+  background: var(--wm-bg-card);
+  border-bottom: 1px solid var(--wm-border);
+}
+.pdot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: var(--wm-radius-full);
+  background: #07c160;
+}
+
+/* 对方身份标签：让用户分得清这条是商家还是骑手回的 */
+.who {
+  margin-bottom: 3px;
+  font-size: var(--wm-font-sm);
+  color: var(--wm-text-3);
+}
+
+.im-input--closed {
+  justify-content: center;
+  color: var(--wm-text-3);
+  font-size: var(--wm-font-md);
+}
+
+.chat-hint {
+  margin-top: var(--wm-space-1);
+  text-align: center;
+  font-size: var(--wm-font-sm);
+  color: var(--wm-text-3);
+}
+
 .im-body {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  padding: var(--wm-space-3);
+  overflow-y: auto;  padding: var(--wm-space-3);
 }
 
 .msg {

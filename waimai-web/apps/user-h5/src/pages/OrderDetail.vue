@@ -10,8 +10,10 @@
         </span>
         <div class="status-main">
           <div class="status-text">{{ statusText(order.status) }}</div>
-          <div class="status-sub" v-if="order.status === 'DELIVERING' && order.riderName">
-            骑手 {{ order.riderName }} 正在配送
+          <!-- 后端 detail() 返回的是 rider 实体（OrderService:562），不是 riderName。
+               原来读 order.riderName 恒为 undefined，这行永远不显示 -->
+          <div class="status-sub" v-if="order.status === 'DELIVERING' && riderName">
+            骑手 {{ riderName }} 正在配送
           </div>
           <div class="status-sub" v-else>订单信息已同步，可下拉进入订单列表查看</div>
         </div>
@@ -83,9 +85,10 @@
     </section>
     <section class="actions">
       <van-button round block plain class="act-btn act-btn--contact" :loading="opening" @click="contactMerchant">
-        <van-icon name="phone-o" size="16" class="btn-icon" />
-        联系商家
+        <van-icon name="chat-o" size="16" class="btn-icon" />
+        联系商家 / 骑手
       </van-button>
+      <div class="chat-hint">商家与骑手在同一个频道；送达后 30 分钟内可反馈问题</div>
     </section>
   </div>
 </template>
@@ -124,16 +127,31 @@ const addressText = computed(() => {
   return who ? `${detail}（${who}）` : detail;
 });
 
-const statusText: Record<string, string> = {
-  PENDING_PAYMENT: '待支付',
-  PAID: '待接单',
-  ACCEPTED: '备餐中',
-  WAITING_PICKUP: '待取餐',
-  DELIVERING: '配送中',
-  DELIVERED: '已送达',
-  CANCELLED: '已取消',
-  REFUNDED: '已退款',
-};
+/**
+ * 骑手姓名。detail() 返回的是 rider 实体（OrderService 里 vo.put("rider", rm)），
+ * 不是 riderName —— 之前模板读 order.riderName 恒为 undefined，导致
+ * 「骑手 X 正在配送」那一行永远不显示。
+ */
+const riderName = computed(() => {
+  const r = order.value?.rider;
+  return typeof r === 'string' ? r : r?.realName || '';
+});
+
+/** 订单状态文案。必须是函数（模板按 statusText(order.status) 调用）。 */
+function statusText(s?: string): string {
+  return (
+    {
+      PENDING_PAYMENT: '待支付',
+      PAID: '待接单',
+      ACCEPTED: '备餐中',
+      WAITING_PICKUP: '待取餐',
+      DELIVERING: '配送中',
+      DELIVERED: '已送达',
+      CANCELLED: '已取消',
+      REFUNDED: '已退款',
+    }[s || ''] || s || ''
+  );
+}
 
 /** 仅用于状态时间线的进度映射：不改变任何订单逻辑，只把状态翻译成第几步 */
 const tlStep = computed(() => {

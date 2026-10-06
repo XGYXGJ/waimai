@@ -9,29 +9,43 @@ let pending: Promise<boolean> | null = null;
 /**
  * 加载高德 JS API。返回 true 表示 AMap 可用。
  * @param plugins 需要的插件列表，如 ['AMap.Scale']，加载时一次性挂载
+ *
+ * 幂等的同时**必须允许失败后重试**：如果把失败的 Promise 永久缓存住，
+ * 「管理员还没配 map.js_key 就打开过地图页」会导致整个会话里地图彻底不可用 ——
+ * 之后管理员把 Key 配好了，本会话内再调多少次都只拿到那个缓存的 false，
+ * 必须硬刷新才能恢复。所以失败路径要把 pending 清掉。
  */
 export function loadAmap(plugins: string[] = []): Promise<boolean> {
   if ((window as any).AMap) return Promise.resolve(true);
   if (pending) return pending;
-  pending = (async () => {
-    const cfg: any = await get('/common/config/map').catch(() => null);
-    const jsKey: string = cfg?.jsKey || '';
-    const securityCode: string = cfg?.securityCode || '';
-    if (!jsKey) return false;
-    if (securityCode) {
-      (window as any)._AMapSecurityConfig = { securityJsCode: securityCode };
+  const task = (async () => {
+    try {
+      const cfg: any = await get('/common/config/map').catch(() => null);
+      const jsKey: string = cfg?.jsKey || '';
+      const securityCode: string = cfg?.securityCode || '';
+      if (!jsKey) return false;
+      if (securityCode) {
+        (window as any)._AMapSecurityConfig = { securityJsCode: securityCode };
+      }
+      await new Promise<void>((resolve) => {
+        const script = document.createElement('script');
+        const ps = plugins.length ? `&plugin=${plugins.join(',')}` : '';
+        script.src = `https://webapi.amap.com/maps?v=2.0&key=${jsKey}${ps}`;
+        script.onload = () => resolve();
+        script.onerror = () => resolve();
+        document.head.appendChild(script);
+      });
+      return !!(window as any).AMap;
+    } catch {
+      return false;
     }
-    await new Promise<void>((resolve) => {
-      const script = document.createElement('script');
-      const ps = plugins.length ? `&plugin=${plugins.join(',')}` : '';
-      script.src = `https://webapi.amap.com/maps?v=2.0&key=${jsKey}${ps}`;
-      script.onload = () => resolve();
-      script.onerror = () => resolve();
-      document.head.appendChild(script);
-    });
-    return !!(window as any).AMap;
   })();
-  return pending;
+  pending = task;
+  // 失败就释放，允许下一次调用重新尝试
+  task.finally(() => {
+    if (pending === task) pending = null;
+  });
+  return task;
 }
 
 export interface GeoPoint {

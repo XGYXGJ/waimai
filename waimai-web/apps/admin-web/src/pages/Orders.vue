@@ -9,7 +9,7 @@
     </div>
     <el-table :data="records">
       <el-table-column prop="orderNo" label="订单号" width="180" />
-      <el-table-column prop="addressSnapshot" label="地址" show-overflow-tooltip />
+      <el-table-column prop="addressText" label="地址" show-overflow-tooltip />
       <el-table-column prop="payAmount" label="金额" width="100" />
       <el-table-column label="状态" width="100">
         <template #default="{ row }">{{ statusMap[row.status] || row.status }}</template>
