@@ -2,6 +2,7 @@ package com.waimai.websocket;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.waimai.service.OrderService;
 import com.waimai.service.TrackService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -24,9 +25,13 @@ public class WaimaiWsHandler extends TextWebSocketHandler {
 
     private final ObjectMapper mapper = new ObjectMapper();
     private final TrackService trackService;
+    private final OrderService orderService;
+    private final WsPusher wsPusher;
 
-    public WaimaiWsHandler(TrackService trackService) {
+    public WaimaiWsHandler(TrackService trackService, OrderService orderService, WsPusher wsPusher) {
         this.trackService = trackService;
+        this.orderService = orderService;
+        this.wsPusher = wsPusher;
     }
 
     // userId -> session（一个用户一处登录，重复登录顶号）
@@ -59,18 +64,33 @@ public class WaimaiWsHandler extends TextWebSocketHandler {
             case "PING" -> send(session, Map.of("type", "PONG"));
             case "SUBSCRIBE_ORDER" -> {
                 long orderId = node.path("orderId").asLong();
+                // 归属校验：不给「登录就能订阅任意订单」留口子，
+                // 否则任何账号都能收到别人订单的骑手实时坐标（隐私 + 越权）。
+                if (!orderService.canTrack(userId, orderId)) {
+                    send(session, Map.of("type", "ERROR", "msg", "无权查看该订单"));
+                    return;
+                }
                 ORDER_SUBSCRIBERS.computeIfAbsent(orderId, k -> ConcurrentHashMap.newKeySet()).add(userId);
             }
             case "UNSUBSCRIBE_ORDER" -> {
                 long orderId = node.path("orderId").asLong();
                 java.util.Set<Long> set = ORDER_SUBSCRIBERS.get(orderId);
-                if (set != null) set.remove(userId);
+                if (set != null) {
+                    set.remove(userId);
+                    // 清掉空集合：订单 id 单调递增，不删就是无上限的 key 泄漏
+                    if (set.isEmpty()) ORDER_SUBSCRIBERS.remove(orderId, set);
+                }
             }
             case "LOCATION_REPORT" -> {
                 // 骑手位置上报（真实 GPS 与模拟骑行共用）
                 double lng = node.path("lng").asDouble();
                 double lat = node.path("lat").asDouble();
                 Long orderId = node.path("orderId").asLong(0);
+                // 同样要归属校验：否则任何账号都能往任意订单的追踪页注入假坐标
+                if (orderId != null && !orderService.canTrack(userId, orderId)) {
+                    send(session, Map.of("type", "ERROR", "msg", "无权上报该订单位置"));
+                    return;
+                }
                 trackService.report(userId, lng, lat, orderId == 0 ? null : orderId);
             }
             default -> send(session, Map.of("type", "ERROR", "msg", "未知消息类型: " + type));
@@ -82,7 +102,13 @@ public class WaimaiWsHandler extends TextWebSocketHandler {
         Long userId = (Long) session.getAttributes().get("userId");
         if (userId != null && USER_SESSIONS.get(userId) == session) {
             USER_SESSIONS.remove(userId);
-            ORDER_SUBSCRIBERS.values().forEach(s -> s.remove(userId));
+            // 顺带清掉退订后变空的集合。原来只 remove(userId) 不删 key，
+            // 而每次断开都要遍历所有订阅过的订单 —— 演示一天下来会明显变慢。
+            ORDER_SUBSCRIBERS.forEach((orderId, set) -> {
+                set.remove(userId);
+                if (set.isEmpty()) ORDER_SUBSCRIBERS.remove(orderId, set);
+            });
+            wsPusher.unwatchAll(userId);
         }
         log.info("ws closed: userId={}, status={}", userId, status);
     }

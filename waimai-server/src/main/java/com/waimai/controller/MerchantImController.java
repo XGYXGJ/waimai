@@ -29,13 +29,14 @@ public class MerchantImController {
     public R<Map<String, Object>> messages(@PathVariable Long id,
                                            @RequestParam(required = false) Long sinceId) {
         Long merchantId = imService.merchantIdOf(UserContext.userId());
-        return R.ok(imService.messages(id, sinceId, false, merchantId));
+        return R.ok(imService.messages(id, sinceId, ImService.SIDE_MERCHANT, merchantId));
     }
 
+    /** 发消息：文本 / 图片 / 工单卡片（答复售后） */
     @PostMapping("/session/{id}/send")
     public R<Map<String, Object>> send(@PathVariable Long id, @RequestBody WebDTO.ImSendReq req) {
         Long merchantId = imService.merchantIdOf(UserContext.userId());
-        return R.ok(imService.send(id, "MERCHANT", merchantId, req));
+        return R.ok(imService.send(id, ImService.SIDE_MERCHANT, merchantId, req));
     }
 
     /** 工单列表：status 为空查全部 */

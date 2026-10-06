@@ -5,6 +5,8 @@ import com.waimai.config.RabbitMQConfig;
 import com.waimai.entity.*;
 import com.waimai.mapper.*;
 import com.waimai.service.OrderService;
+import com.waimai.service.TrackService;
+import com.waimai.websocket.WsPusher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -36,6 +38,8 @@ public class ScheduleJobs {
     private final CouponMapper couponMapper;
     private final StringRedisTemplate redis;
     private final OrderService orderService;
+    private final TrackService trackService;
+    private final WsPusher wsPusher;
 
     /* ---------- ItemCF 相似度（每日 3:00） ---------- */
 
@@ -192,6 +196,43 @@ public class ScheduleJobs {
             }
         }
         log.info("[job] expire coupons done, expired={}", cnt);
+    }
+
+    /* ---------- 骑手位置节流广播（每 5 分钟） ---------- */
+
+    /**
+     * 配送中订单的骑手位置，每 5 分钟向订阅该订单的用户与商家各推一次。
+     *
+     * <p>为什么要定时推：骑手上报是「他自己什么时候点就什么时候点」，
+     * 前端开着追踪页时能收到实时消息，但商家端多半没开追踪页 —— 靠这条定时广播
+     * 让商家侧也能看到配送进度，不必自己轮询。
+     * 取餐 / 送达两个关键节点由 {@code RiderService} 立即推，不等这个定时器。
+     */
+    @Scheduled(cron = "0 */5 * * * ?")
+    public void broadcastRiderLocations() {
+        List<Orders> active = ordersMapper.selectList(new QueryWrapper<Orders>()
+                .isNotNull("rider_id")
+                .in("status", "WAITING_PICKUP", "DELIVERING")
+                .orderByDesc("updated_at")
+                .last("limit 100"));
+        if (active.isEmpty()) return;
+
+        int pushed = 0;
+        for (Orders o : active) {
+            Map<String, Object> loc = trackService.latest(o.getRiderId());
+            if (loc == null || loc.get("lng") == null || loc.get("lat") == null) continue;
+            try {
+                wsPusher.pushRiderLocation(o.getId(),
+                        Double.parseDouble(String.valueOf(loc.get("lng"))),
+                        Double.parseDouble(String.valueOf(loc.get("lat"))));
+                pushed++;
+            } catch (NumberFormatException ignored) {
+                // 位置脏数据直接跳过
+            }
+        }
+        if (pushed > 0) {
+            log.info("[job] rider locations broadcast, active={}, pushed={}", active.size(), pushed);
+        }
     }
 
     /* ---------- 超时未支付订单兜底取消（每分钟） ---------- */

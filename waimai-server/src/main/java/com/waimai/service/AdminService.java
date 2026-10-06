@@ -2,6 +2,7 @@ package com.waimai.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.waimai.common.exception.BizException;
+import com.waimai.common.util.JsonUtil;
 import com.waimai.entity.*;
 import com.waimai.mapper.*;
 import lombok.RequiredArgsConstructor;
@@ -99,6 +100,13 @@ public class AdminService {
 
     /* ---------- 订单 ---------- */
 
+    /**
+     * 管理端全量订单列表。
+     *
+     * <p>补 addressText：原来直接返回实体，前端表格绑 address_snapshot 会把
+     * 一整段 JSON 显示出来（用户端 / 商户端早就改成读 addressText，这里口径不一致）。
+     * 保留 addressSnapshot 原值供检索与调试。
+     */
     public Map<String, Object> orders(String keyword, String status, int page, int size) {
         QueryWrapper<Orders> qw = new QueryWrapper<Orders>()
                 .eq(status != null && !status.isBlank(), "status", status)
@@ -107,7 +115,37 @@ public class AdminService {
                 .orderByDesc("created_at");
         long total = ordersMapper.selectCount(qw);
         List<Orders> list = ordersMapper.selectList(qw.last("limit " + ((page - 1) * size) + "," + size));
-        return Map.of("total", total, "records", list);
+
+        List<Map<String, Object>> records = new ArrayList<>(list.size());
+        for (Orders o : list) {
+            Map<String, Object> vo = new LinkedHashMap<>();
+            vo.put("id", o.getId());
+            vo.put("orderNo", o.getOrderNo());
+            vo.put("userId", o.getUserId());
+            vo.put("merchantId", o.getMerchantId());
+            vo.put("riderId", o.getRiderId());
+            vo.put("addressText", addressTextOf(o.getAddressSnapshot()));
+            vo.put("addressSnapshot", o.getAddressSnapshot());
+            vo.put("payAmount", o.getPayAmount());
+            vo.put("dishAmount", o.getDishAmount());
+            vo.put("deliveryFee", o.getDeliveryFee());
+            vo.put("status", o.getStatus());
+            vo.put("createdAt", o.getCreatedAt());
+            records.add(vo);
+        }
+        return Map.of("total", total, "records", records);
+    }
+
+    /** 从 address_snapshot 取出拼好的地址文本；解析失败退回原文，绝不抛异常 */
+    private String addressTextOf(String snapshot) {
+        if (snapshot == null || snapshot.isBlank()) return "";
+        try {
+            Map<String, Object> m = JsonUtil.fromJson(snapshot, Map.class);
+            Object detail = m == null ? null : m.get("detail");
+            return detail == null ? snapshot : String.valueOf(detail);
+        } catch (Exception e) {
+            return snapshot;
+        }
     }
 
     public void refund(Long orderId) {
@@ -185,14 +223,23 @@ public class AdminService {
         Long newUsers = userMapper.selectCount(new QueryWrapper<User>()
                 .ge("created_at", weekStart));
         Long merchantCount = merchantMapper.selectCount(new QueryWrapper<Merchant>().eq("audit_status", 1));
-        Long riderOnline = riderMapper.selectCount(new QueryWrapper<Rider>().eq("work_status", 1));
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("gmv", gmv);
         result.put("orderTrend", trend);
         result.put("newUsers", newUsers);
         result.put("merchantCount", merchantCount);
-        result.put("riderOnline", riderOnline);
+        // 骑手上线情况：0 休息 / 1 空闲 / 2 配送中。
+        // 「上线」按 work_status>=1 统计，并单列在途单数供交叉核对 ——
+        // 自助注册的骑手 work_status 停在默认 0，所以这个数只反映「已在接单/空闲」，
+        // 真正「此刻在线」的口径在 RiderService#riderProfile 里按 WS 在线派生。
+        result.put("riderTotal", riderMapper.selectCount(null));
+        result.put("riderOnline", riderMapper.selectCount(new QueryWrapper<Rider>().ge("work_status", 1)));
+        result.put("riderIdle", riderMapper.selectCount(new QueryWrapper<Rider>().eq("work_status", 1)));
+        result.put("riderBusy", riderMapper.selectCount(new QueryWrapper<Rider>().eq("work_status", 2)));
+        result.put("riderResting", riderMapper.selectCount(new QueryWrapper<Rider>().eq("work_status", 0)));
+        result.put("riderInFlight", ordersMapper.selectCount(new QueryWrapper<Orders>()
+                .isNotNull("rider_id").in("status", "WAITING_PICKUP", "DELIVERING")));
         result.put("userCount", userMapper.selectCount(null));
         result.put("orderCount", ordersMapper.selectCount(null));
         // 收入构成（平台/商家/骑手），大屏与「收入结算」页共用同一套口径

@@ -6,9 +6,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -40,6 +42,31 @@ public class GlobalExceptionHandler {
         String msg = e.getBindingResult().getFieldErrors().isEmpty() ? "参数错误"
                 : e.getBindingResult().getFieldErrors().get(0).getDefaultMessage();
         return R.fail(ResultCode.PARAM_ERROR, msg);
+    }
+
+    /**
+     * 路径变量 / 请求参数类型不匹配：例如 {@code GET /api/merchant/orders} 会被
+     * {@code @GetMapping("/{id}")} 匹配上，但 "orders" 转不了 Long。
+     *
+     * <p>这属于客户端拼错 URL，不是系统故障。以前会掉进下面的 Exception 兜底，
+     * 返回「系统繁忙，请稍后再试」+ HTTP 200 —— 误导排查的人，还会在日志里留下一条
+     * 无意义的 ERROR 堆栈。这里返回 400 与明确的参数提示。
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public R<Void> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
+        log.warn("type mismatch: {}", e.getMessage());
+        String name = e.getName() == null ? "参数" : e.getName();
+        return R.fail(ResultCode.PARAM_ERROR, "参数格式不正确：" + name);
+    }
+
+    /**
+     * 请求体不是合法 JSON（前端少逗号、类型写错等）。同样属于客户端问题，
+     * 不该报「系统繁忙」。
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public R<Void> handleUnreadable(HttpMessageNotReadableException e) {
+        log.warn("unreadable body: {}", e.getMessage());
+        return R.fail(ResultCode.PARAM_ERROR, "请求体格式不正确");
     }
 
     /**

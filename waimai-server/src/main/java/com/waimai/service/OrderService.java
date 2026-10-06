@@ -504,6 +504,34 @@ public class OrderService {
         return pageWithDetail(qw, page, size);
     }
 
+    /**
+     * 能否查看 / 上报该订单的骑手位置。
+     *
+     * <p>WebSocket 的 SUBSCRIBE_ORDER 与 LOCATION_REPORT 都必须过这一关。
+     * 原来这两条通道不做任何校验，等于「登录即可订阅任意订单看他人骑手坐标」，
+     * 且「任意账号可往任意订单注入假坐标」。HTTP 的 POST /api/rider/location 同理。
+     *
+     * <p>口径与 {@link #detail} 一致：下单用户 / 该店商家 / 该单骑手 / 管理员。
+     */
+    public boolean canTrack(Long userId, Long orderId) {
+        if (userId == null || orderId == null) return false;
+        Orders o = ordersMapper.selectById(orderId);
+        if (o == null) return false;
+        User u = userMapper.selectById(userId);
+        if (u == null) return false;
+        if (Objects.equals(o.getUserId(), userId)) return true;
+        if ("ADMIN".equals(u.getRole())) return true;
+        if ("MERCHANT".equals(u.getRole())) {
+            Merchant m = mOf(userId);
+            return m != null && Objects.equals(m.getId(), o.getMerchantId());
+        }
+        if ("RIDER".equals(u.getRole())) {
+            Rider r = riderOfUser(userId);
+            return r != null && Objects.equals(o.getRiderId(), r.getId());
+        }
+        return false;
+    }
+
     public Map<String, Object> detail(Long userId, Long orderId) {
         Orders order = ordersMapper.selectById(orderId);
         if (order == null) throw new BizException(ResultCode.NOT_FOUND, "订单不存在");

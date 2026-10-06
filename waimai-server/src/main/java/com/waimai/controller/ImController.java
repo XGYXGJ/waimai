@@ -34,13 +34,13 @@ public class ImController {
     @GetMapping("/session/{id}/messages")
     public R<Map<String, Object>> messages(@PathVariable Long id,
                                            @RequestParam(required = false) Long sinceId) {
-        return R.ok(imService.messages(id, sinceId, true, UserContext.userId()));
+        return R.ok(imService.messages(id, sinceId, ImService.SIDE_USER, UserContext.userId()));
     }
 
     /** 发消息：文本 / 图片 / 订单卡片 */
     @PostMapping("/session/{id}/send")
     public R<Map<String, Object>> send(@PathVariable Long id, @RequestBody WebDTO.ImSendReq req) {
-        return R.ok(imService.send(id, "USER", UserContext.userId(), req));
+        return R.ok(imService.send(id, ImService.SIDE_USER, UserContext.userId(), req));
     }
 
     /** 发起售后工单（退款 / 赔偿 / 补发 / 其他） */

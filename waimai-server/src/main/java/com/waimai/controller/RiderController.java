@@ -17,25 +17,40 @@ public class RiderController {
 
     private final RiderService riderService;
 
-    /** 骑手身份信息 */
+    /** 骑手身份信息（含在途单数、今日单数、是否在线） */
     @RequireRole("RIDER")
     @GetMapping("/info")
     public R<?> info() {
-        return R.ok(riderService.riderOf(UserContext.userId()));
+        return R.ok(riderService.riderProfile(UserContext.userId()));
     }
 
-    /** 抢单大厅（L1） */
+    /** 上下班切换 */
+    @RequireRole("RIDER")
+    @PostMapping("/online")
+    public R<Void> online(@RequestParam boolean value) {
+        riderService.setOnline(UserContext.userId(), value);
+        return R.ok();
+    }
+
+    /** 抢单大厅（L1）：带配送费与「骑手当前位置 → 商家」直线距离，按距离由近到远 */
     @RequireRole("RIDER")
     @GetMapping("/hall")
     public R<List<Map<String, Object>>> hall() {
-        return R.ok(riderService.grabHall());
+        return R.ok(riderService.grabHall(UserContext.userId()));
     }
 
-    /** 我的配送 */
+    /** 我的配送（进行中 + 已送达） */
     @RequireRole("RIDER")
     @GetMapping("/deliveries")
     public R<List<Map<String, Object>>> deliveries() {
         return R.ok(riderService.myDeliveries(riderService.riderIdOf(UserContext.userId())));
+    }
+
+    /** 历史订单：只含已送达。与 /deliveries 分开，避免两个 tab 显示同一份数据 */
+    @RequireRole("RIDER")
+    @GetMapping("/history")
+    public R<List<Map<String, Object>>> history() {
+        return R.ok(riderService.myHistory(riderService.riderIdOf(UserContext.userId())));
     }
 
     /** 接单 */
@@ -62,7 +77,7 @@ public class RiderController {
         return R.ok();
     }
 
-    /** 位置上报（L3，真实 GPS / 模拟骑行共用） */
+    /** 位置上报（L3，真实 GPS / 模拟骑行共用）。orderId 可选，带上时校验归属 */
     @RequireRole("RIDER")
     @PostMapping("/location")
     public R<Void> reportLocation(@RequestParam double lng,

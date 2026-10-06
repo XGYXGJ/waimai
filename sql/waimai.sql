@@ -412,22 +412,26 @@ CREATE TABLE `im_session` (
   `order_id`         BIGINT       NOT NULL                COMMENT '订单 ID',
   `user_id`          BIGINT       NOT NULL                COMMENT '下单用户',
   `merchant_id`      BIGINT       NOT NULL                COMMENT '商家 ID',
+  `rider_id`         BIGINT       NULL                    COMMENT '接单骑手（rider.id），接单前为空',
   `status`           VARCHAR(20)  NOT NULL DEFAULT 'OPEN' COMMENT 'OPEN/CLOSED',
+  `close_at`         DATETIME     NULL                    COMMENT '会话失效时间（送达后 30 分钟）',
   `last_msg`         VARCHAR(200) DEFAULT NULL            COMMENT '最后一条消息摘要',
   `last_msg_at`      DATETIME     DEFAULT NULL            COMMENT '最后消息时间',
   `user_unread`      INT          NOT NULL DEFAULT 0      COMMENT '用户未读数',
   `merchant_unread`  INT          NOT NULL DEFAULT 0      COMMENT '商家未读数',
+  `rider_unread`     INT          NOT NULL DEFAULT 0      COMMENT '骑手未读数',
   `created_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY `uk_order` (`order_id`),
   KEY `idx_user` (`user_id`, `updated_at`),
-  KEY `idx_merchant` (`merchant_id`, `updated_at`)
-) ENGINE=InnoDB COMMENT='订单会话';
+  KEY `idx_merchant` (`merchant_id`, `updated_at`),
+  KEY `idx_rider` (`rider_id`, `updated_at`)
+) ENGINE=InnoDB COMMENT='订单会话（用户+商家+骑手三方）';
 
 CREATE TABLE `im_message` (
   `id`          BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
   `session_id`  BIGINT       NOT NULL                COMMENT '会话 ID',
-  `sender_role` VARCHAR(16)  NOT NULL                COMMENT 'USER/MERCHANT/SYSTEM',
+  `sender_role` VARCHAR(16)  NOT NULL                COMMENT 'USER/MERCHANT/RIDER/SYSTEM',
   `msg_type`    VARCHAR(16)  NOT NULL DEFAULT 'TEXT' COMMENT 'TEXT/IMAGE/ORDER/TICKET',
   `content`     VARCHAR(1000) DEFAULT NULL           COMMENT '文本内容',
   `payload`     JSON         DEFAULT NULL            COMMENT '结构化数据: 图片数组/订单快照/工单信息',
