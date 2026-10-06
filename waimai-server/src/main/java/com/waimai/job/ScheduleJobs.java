@@ -1,8 +1,10 @@
 package com.waimai.job;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.waimai.config.RabbitMQConfig;
 import com.waimai.entity.*;
 import com.waimai.mapper.*;
+import com.waimai.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -16,7 +18,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
- * 定时任务：ItemCF 相似度、用户画像、销量日聚合、竞价日预算重置、优惠券过期。
+ * 定时任务：ItemCF 相似度、用户画像、销量日聚合、竞价日预算重置、优惠券过期、
+ * 超时未支付订单兜底取消（MQ 不可用时的最后防线）。
  */
 @Slf4j
 @Component
@@ -32,6 +35,7 @@ public class ScheduleJobs {
     private final UserCouponMapper userCouponMapper;
     private final CouponMapper couponMapper;
     private final StringRedisTemplate redis;
+    private final OrderService orderService;
 
     /* ---------- ItemCF 相似度（每日 3:00） ---------- */
 
@@ -188,5 +192,34 @@ public class ScheduleJobs {
             }
         }
         log.info("[job] expire coupons done, expired={}", cnt);
+    }
+
+    /* ---------- 超时未支付订单兜底取消（每分钟） ---------- */
+
+    /**
+     * MQ 正常时由 {@link com.waimai.mq.OrderTimeoutListener} 消费延迟消息取消订单；
+     * RabbitMQ 不可用（或消息丢失）时，这个任务就是最后防线：每分钟扫一遍
+     * 「状态仍是待支付、且下单已超过 {@link RabbitMQConfig#ORDER_PAY_TIMEOUT_MINUTES} 分钟」的订单。
+     * 取消逻辑复用 OrderService#cancelOnTimeout（本身对状态做了幂等判断，重复触发无副作用）。
+     */
+    @Scheduled(cron = "0 * * * * ?")
+    public void cancelTimeoutOrders() {
+        LocalDateTime deadline = LocalDateTime.now().minusMinutes(RabbitMQConfig.ORDER_PAY_TIMEOUT_MINUTES);
+        List<Orders> list = ordersMapper.selectList(new QueryWrapper<Orders>()
+                .eq("status", "PENDING_PAYMENT")
+                .lt("created_at", deadline));
+        if (list.isEmpty()) {
+            return;
+        }
+        int done = 0;
+        for (Orders order : list) {
+            try {
+                orderService.cancelOnTimeout(order.getId());
+                done++;
+            } catch (Exception e) {
+                log.warn("[job] 兜底取消订单 {} 失败：{}", order.getId(), e.getMessage());
+            }
+        }
+        log.info("[job] timeout orders cancelled, scanned={}, cancelled={}", list.size(), done);
     }
 }

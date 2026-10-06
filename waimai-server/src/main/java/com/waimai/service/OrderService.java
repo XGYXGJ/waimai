@@ -335,8 +335,14 @@ public class OrderService {
         }
 
         // ---- MQ 延迟消息（15分钟未支付自动取消） ----
-        rabbitTemplate.convertAndSend(RabbitMQConfig.DELAY_EXCHANGE,
-                RabbitMQConfig.DELAY_ROUTING_KEY, String.valueOf(order.getId()));
+        // MQ 抖动或未就绪时不能让「下单」整体失败：发不出去只告警，
+        // 兜底由 ScheduleJobs#cancelTimeoutOrders 每分钟扫描一次完成（不依赖 MQ）。
+        try {
+            rabbitTemplate.convertAndSend(RabbitMQConfig.DELAY_EXCHANGE,
+                    RabbitMQConfig.DELAY_ROUTING_KEY, String.valueOf(order.getId()));
+        } catch (Exception e) {
+            log.error("[MQ] 订单 {} 延迟消息发送失败，改由定时任务兜底自动取消：{}", order.getId(), e.getMessage());
+        }
 
         cartService.clearMerchant(userId, m.getId());
         return Map.of("id", order.getId(), "orderId", order.getId(),

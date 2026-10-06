@@ -48,10 +48,30 @@ cd waimai-server && mvn spring-boot:run   # 本机需 Maven
 
 - 前端自动启停开关：`application.yml` 的 `waimai.frontend.auto-start`
 - docker 依赖自动启停开关：`application.yml` 的 `waimai.deps.*`（`auto-start` / `services` /
-  `compose-file` / `ai-health-url` / `start-timeout-seconds` / `stop-timeout-seconds` / `stop-on-shutdown`）；
+  `compose-file` / `ai-health-url` / `start-timeout-seconds` / `ready-timeout-seconds` /
+  `check-database` / `database-service` / `database-ready-timeout-seconds` /
+  `stop-timeout-seconds` / `stop-on-shutdown`）；
   生产部署（后端跑在容器里）应把 `waimai.deps.auto-start` 与 `waimai.frontend.auto-start` 都置为 `false`。
+- docker 依赖是在 **Spring 容器 refresh 之前**（`ApplicationPreparedEvent` 前置阶段）拉起的，所以后端自己的
+  RabbitMQ 监听器启动时中间件已经就绪，启动日志里不会再出现 `AmqpConnectException: Connection refused`。
+- 拉起之后还会等**服务真正就绪**再进入容器 refresh：Redis 探 `127.0.0.1:6379`，RabbitMQ 直接做一次
+  **AMQP 握手**（Docker 的端口映射在容器刚起来时就已监听宿主端口，只探 TCP 会误判「已就绪」，
+  实测 RabbitMQ 从容器启动到能握手约 5 秒），AI 轮询 `/health`。等待上限 `ready-timeout-seconds`（默认 60）。
+- **本机 MySQL 不归 docker 管**（它是 Windows 服务、后端的数据源，compose 里的 mysql 在 3307 只给容器内的 server/ai 用）：
+  启动前置阶段会拿 `spring.datasource.url` 里的 host:port 探一次，连不上就打印一句人话 +
+  可执行提示，而不是等 Hikari 抛一大串 `CommunicationsException`；若配了 `waimai.deps.database-service: MySQL80`，
+  还会尝试 `net start MySQL80`（**IDEA 需以管理员身份运行才有效**，否则只失败并给提示）。
+  它不会被关闭钩子停掉（数据安全，其它工具可能也在用）。
+  遇到「连不上数据库」，先确认这个服务在跑：管理员 PowerShell 执行 `net start MySQL80`。
 - 注意：IDEA 用 **Force Kill**（而不是 Stop）结束进程时 JVM 不会执行关闭钩子，容器不会被自动停掉，
   需要手动 `docker compose stop redis rabbitmq ai`。
+
+### 订单超时取消的双保险
+「15 分钟未支付自动取消」由两条路径共同保证，时长共用 `RabbitMQConfig.ORDER_PAY_TIMEOUT_MINUTES = 15`：
+- 正常路径：下单时投递延迟消息（延迟队列 TTL 15 分钟 → 死信队列 `waimai.order.timeout-q`），
+  由 `OrderTimeoutListener` 消费后调用 `OrderService.cancelOnTimeout()` 取消；
+- 兜底路径：`ScheduleJobs.cancelTimeoutOrders()` 每分钟扫描一次 `status = 'PENDING_PAYMENT'` 且创建超过 15 分钟的订单并取消。
+  因此 RabbitMQ 不可用也不会让订单一直挂着（下单时投递失败只记一条 ERROR 日志，不影响下单事务）。
 
 首次启动自动创建演示数据（详见下方账号表）。
 

@@ -264,7 +264,11 @@ ON DUPLICATE KEY UPDATE status = VALUES(status), rider_id = VALUES(rider_id),
   platform_income = VALUES(platform_income), distance_km = VALUES(distance_km),
   pay_time = VALUES(pay_time), accept_time = VALUES(accept_time),
   pickup_time = VALUES(pickup_time), delivered_time = VALUES(delivered_time),
-  cancel_reason = VALUES(cancel_reason), cancel_by = VALUES(cancel_by);
+  cancel_reason = VALUES(cancel_reason), cancel_by = VALUES(cancel_by),
+  -- created_at 必须一起刷新：所有时间都写成「NOW() - x 分钟/天」的相对值，
+  -- 重跑脚本时若不刷新，1007 会以过期的创建时间复活，被后端「超时未支付自动取消」任务
+  -- 立刻（下一分钟）取消，看不到演示效果。刷新后它重新变回「5 分钟前的待付款订单」。
+  created_at = VALUES(created_at);
 
 -- 订单明细
 INSERT INTO order_item (id, order_id, dish_id, dish_name, image, price, quantity) VALUES
