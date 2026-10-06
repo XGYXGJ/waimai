@@ -292,6 +292,7 @@ public class DependencyLifecycleManager {
             log.error("[依赖] 启动 Windows 服务 {} 失败（exit={}）。请用管理员权限执行：net start {}"
                             + "（或在 services.msc 里启动），然后重跑后端",
                     service, result.exit(), service);
+            logDatabaseFailureHint(port);
             return;
         }
 
@@ -308,6 +309,27 @@ public class DependencyLifecycleManager {
         log.error("[依赖] Windows 服务 {} 已发出启动命令，但 {}:{} 在 {}s 内仍不可用（查 MySQL 错误日志："
                         + "C:\\ProgramData\\MySQL\\MySQL Server 8.0\\Data\\<主机名>.err）",
                 service, host, port, config.databaseReadyTimeoutSeconds());
+        logDatabaseFailureHint(port);
+    }
+
+    /**
+     * 数据库服务起不来时最该看的两个地方：MySQL 自己的错误日志，以及「端口被系统整段预留」。
+     *
+     * <p>后者在装了 Docker Desktop/WSL 的机器上很常见：Hyper-V 的 NAT 会圈走一大段 TCP 端口
+     * （`netsh int ipv4 show excludedportrange protocol=tcp` 能看到，例如 3239-3338 把 3306 包进去），
+     * 此时任何进程（包括 SYSTEM 权限的 docker-proxy 和 MySQL 服务）绑这个端口都会收到
+     * WSAEACCES「以一种访问权限不允许的方式做了一个访问套接字的尝试」，
+     * 表现就是「服务启动后立刻停止」。修复要用管理员权限释放预留：`net stop winnat` → `net start winnat`，
+     * 且顺序要先起 MySQL、再起 Docker。
+     */
+    private void logDatabaseFailureHint(int port) {
+        log.error("[依赖] 排查提示：如果 MySQL 是「启动后立刻停止」，常见原因是端口 {} 被占用或被系统预留。"
+                        + "① 看 MySQL 错误日志 C:\\ProgramData\\MySQL\\MySQL Server 8.0\\Data\\<主机名>.err；"
+                        + "② 执行 netsh int ipv4 show excludedportrange protocol=tcp，"
+                        + "若 {} 落在某个范围里（Docker Desktop/WSL 的 Hyper-V NAT 会整段圈走端口，"
+                        + "此时连 SYSTEM 权限的进程也绑不上，报 WSAEACCES），"
+                        + "用管理员权限执行 net stop winnat 再 net start winnat 释放，然后先起 MySQL、最后开 Docker",
+                port, port);
     }
 
     /** 等待 docker 依赖的服务真正开始监听端口（容器 start 完成 ≠ 端口可连接） */

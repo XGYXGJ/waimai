@@ -63,6 +63,14 @@ cd waimai-server && mvn spring-boot:run   # 本机需 Maven
   还会尝试 `net start MySQL80`（**IDEA 需以管理员身份运行才有效**，否则只失败并给提示）。
   它不会被关闭钩子停掉（数据安全，其它工具可能也在用）。
   遇到「连不上数据库」，先确认这个服务在跑：管理员 PowerShell 执行 `net start MySQL80`。
+  如果服务**启动后立刻停止**（服务管理器只弹「MySQL80 服务启动后停止」），日志里会有一条排查提示：
+  先看 `C:\ProgramData\MySQL\MySQL Server 8.0\Data\<主机名>.err`，再执行
+  `netsh int ipv4 show excludedportrange protocol=tcp` 看 3306 是否落在某个**系统预留范围**里 ——
+  装了 Docker Desktop/WSL 的机器上，Hyper-V 的 NAT 常整段圈走端口（本机实测 3239-3338 把 3306、3307 都包了），
+  此时任何进程（连 SYSTEM 权限的 docker-proxy 也一样）绑它都报 WSAEACCES
+  「以一种访问权限不允许的方式做了一个访问套接字的尝试」，表现就是「启动后立刻停止」。
+  修复：管理员执行 `net stop winnat` → `net start winnat` 释放预留，然后**先起 MySQL、最后开 Docker**
+  （先被占用的端口不会再被圈走）。
 - 注意：IDEA 用 **Force Kill**（而不是 Stop）结束进程时 JVM 不会执行关闭钩子，容器不会被自动停掉，
   需要手动 `docker compose stop redis rabbitmq ai`。
 
